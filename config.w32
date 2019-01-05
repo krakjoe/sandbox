@@ -1,0 +1,20 @@
+ARG_WITH('sandbox', 'sandbox support', 'no');
+
+if (PHP_SANDBOX != 'no') {
+	AC_DEFINE('HAVE_SANDBOX', 1, 'sandbox support enabled');
+
+	if(CHECK_HEADER_ADD_INCLUDE("pthread.h", "CFLAGS_SANDBOX", PHP_SANDBOX + ";" + configure_module_dirname) &&    
+		CHECK_HEADER_ADD_INCLUDE("sched.h", "CFLAGS_SANDBOX", PHP_SANDBOX + ";" + configure_module_dirname) &&
+		CHECK_LIB("pthreadVC2.lib", "sandbox", PHP_SANDBOX) &&
+		CHECK_LIB("ws2_32.lib", "sandbox", PHP_SANDBOX) &&
+		CHECK_LIB("Iphlpapi.lib", "sandbox", PHP_SANDBOX)) {
+		EXTENSION("sandbox", "sandbox.c", PHP_SANDBOX_SHARED, "/DZEND_ENABLE_STATIC_TSRMLS_CACHE=1 /I" + configure_module_dirname);
+		ADD_SOURCES(
+			configure_module_dirname + "/src",
+			"copy.c monitor.c sandbox.c", 
+			"sandbox"
+		);
+	} else {
+		WARNING("sandbox not enabled; pthread libraries and headers not found");
+	}
+}
