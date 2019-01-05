@@ -155,6 +155,8 @@ void* php_sandbox_routine(void *arg) {
 
 	TSRMLS_CACHE_UPDATE();
 
+	php_request_startup();
+
 	if (!Z_ISUNDEF(sandbox->configuration)) {
 		zend_string *name;
 		zval        *value;
@@ -167,7 +169,7 @@ void* php_sandbox_routine(void *arg) {
 			} else {
 				chars = zval_get_string(value);
 			}
-			
+
 			zend_alter_ini_entry_chars(name, 
 				ZSTR_VAL(chars), ZSTR_LEN(chars), 
 				ZEND_INI_SYSTEM, ZEND_INI_STAGE_STARTUP);
@@ -177,8 +179,6 @@ void* php_sandbox_routine(void *arg) {
 	}
 
 	php_sandbox_monitor_set(sandbox->monitor, PHP_SANDBOX_READY, 1);
-
-	php_request_startup();
 
 	ZVAL_UNDEF(&sandbox->entry.retval);
 
