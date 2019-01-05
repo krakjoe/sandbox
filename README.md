@@ -2,6 +2,10 @@ sandbox
 =======
 *A dangerous extension, for dangerous individuals!*
 
+[![Build Status](https://travis-ci.org/krakjoe/sandbox.svg?branch=master)](https://travis-ci.org/krakjoe/sandbox)
+[![Coverage Status](https://coveralls.io/repos/github/krakjoe/sandbox/badge.svg?branch=master)](https://coveralls.io/github/krakjoe/sandbox?branch=master)
+
+
 This is a sandbox for PHP7 ... it's largely untested, quite dangerous, and a little unfinished.
 
 runkit used to contain a sandbox that used TSRM to run PHP code in isolation. PHP7 still has TSRM, however, since it uses honest to goodness thread local storage, and in addition, caches TSRM storage locally in each binary (one in php, one in runkit.so and so on), the same hacks are not possible.
