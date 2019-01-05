@@ -31,6 +31,16 @@ void* php_sandbox_routine(void *arg);
 PHP_METHOD(Sandbox, __construct)
 {
 	php_sandbox_t *sandbox = php_sandbox_from(getThis());
+	zval          *configuration = NULL;
+
+	if (zend_parse_parameters_ex(ZEND_PARSE_PARAMS_QUIET, ZEND_NUM_ARGS(), "|a", &configuration) != SUCCESS) {
+		zend_throw_error(NULL, "only optional configuration expected");
+		return;
+	}
+
+	if (configuration) {
+		ZVAL_COPY_VALUE(&sandbox->configuration, configuration);
+	}
 
 	if (pthread_create(&sandbox->thread, NULL, php_sandbox_routine, sandbox) != SUCCESS) {
 		zend_throw_error(NULL, "cannot create sandbox thread");
@@ -144,6 +154,27 @@ void* php_sandbox_routine(void *arg) {
 	sandbox->context = ts_resource(0);
 
 	TSRMLS_CACHE_UPDATE();
+
+	if (!Z_ISUNDEF(sandbox->configuration)) {
+		zend_string *name;
+		zval        *value;
+
+		ZEND_HASH_FOREACH_STR_KEY_VAL(Z_ARRVAL(sandbox->configuration), name, value) {
+			zend_string *chars;
+
+			if (Z_TYPE_P(value) == IS_STRING) {
+				chars = zend_string_copy(Z_STR_P(value));			
+			} else {
+				chars = zval_get_string(value);
+			}
+			
+			zend_alter_ini_entry_chars(name, 
+				ZSTR_VAL(chars), ZSTR_LEN(chars), 
+				ZEND_INI_SYSTEM, ZEND_INI_STAGE_STARTUP);
+
+			zend_string_release(chars);
+		} ZEND_HASH_FOREACH_END();
+	}
 
 	php_sandbox_monitor_set(sandbox->monitor, PHP_SANDBOX_READY, 1);
 

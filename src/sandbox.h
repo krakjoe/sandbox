@@ -34,6 +34,7 @@ typedef struct _php_sandbox_t {
 	void      ***context;
 	php_sandbox_monitor_t *monitor;
 	php_sandbox_entry_point_t entry;
+	zval configuration;
 	zend_object std;
 } php_sandbox_t;
 
