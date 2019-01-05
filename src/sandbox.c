@@ -165,7 +165,7 @@ void* php_sandbox_routine(void *arg) {
 			zend_string *chars;
 
 			if (Z_TYPE_P(value) == IS_STRING) {
-				chars = zend_string_copy(Z_STR_P(value));			
+				chars = Z_STR_P(value);
 			} else {
 				chars = zval_get_string(value);
 			}
@@ -174,7 +174,9 @@ void* php_sandbox_routine(void *arg) {
 				ZSTR_VAL(chars), ZSTR_LEN(chars), 
 				ZEND_INI_SYSTEM, ZEND_INI_STAGE_STARTUP);
 
-			zend_string_release(chars);
+			if (Z_TYPE_P(value) != IS_STRING) {
+				zend_string_release(chars);
+			}
 		} ZEND_HASH_FOREACH_END();
 	}
 
