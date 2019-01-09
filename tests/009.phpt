@@ -17,7 +17,7 @@ try {
 	var_dump($t->getMessage());
 }
 ?>
---EXPECT--
-string(56) "cannot declare anonymous classes directly in the sandbox"
+--EXPECTF--
+string(%d) "cannot declare anonymous class directly in the sandbox on line %d"
 
 

@@ -18,7 +18,7 @@ try {
 	var_dump($ex->getMessage());
 }
 ?>
---EXPECT--
-string(58) "cannot declare anonymous functions directly in the sandbox"
+--EXPECTF--
+string(%d) "cannot declare anonymous function directly in the sandbox on line %d"
 
 

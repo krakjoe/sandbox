@@ -17,6 +17,6 @@ try {
 	var_dump($ex->getMessage());
 }
 ?>
---EXPECT--
-string(38) "cannot bind static vars in the sandbox"
+--EXPECTF--
+string(%d) "cannot bind lexical vars in the sandbox"
 

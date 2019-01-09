@@ -17,7 +17,7 @@ try {
 	var_dump($t->getMessage());
 }
 ?>
---EXPECT--
-string(46) "cannot declare classes directly in the sandbox"
+--EXPECTF--
+string(%d) "cannot declare class directly in the sandbox on line %d"
 
 

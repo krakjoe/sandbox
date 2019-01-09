@@ -225,30 +225,33 @@ zend_bool php_sandbox_copy_check(zend_execute_data *execute_data, zend_function 
 	while (it < end) {
 		switch (it->opcode) {
 			case ZEND_DECLARE_ANON_CLASS:
-				zend_throw_error(NULL, 
-					"cannot declare anonymous classes directly in the sandbox");
+				zend_throw_error(NULL,
+					"cannot declare anonymous class directly in the sandbox on line %d",
+					it->lineno);
 				return 0;
 
 			case ZEND_DECLARE_LAMBDA_FUNCTION:
 				zend_throw_error(NULL,
-					"cannot declare anonymous functions directly in the sandbox");
+					"cannot declare anonymous function directly in the sandbox on line %d",
+					it->lineno);
 				return 0;
 
 			case ZEND_DECLARE_CLASS:
 			case ZEND_DECLARE_INHERITED_CLASS:
 				zend_throw_error(NULL,
-					"cannot declare classes directly in the sandbox");
+					"cannot declare class directly in the sandbox on line %d", 
+					it->lineno);
 				return 0;
 
-			case ZEND_BIND_STATIC: if (EX(func)->type == ZEND_USER_FUNCTION) {
+			case ZEND_BIND_STATIC:	
 				if (php_sandbox_copying_lexical(execute_data, function, it)) {
 					zend_throw_error(NULL,
-						"cannot bind static vars in the sandbox");
+						"cannot bind lexical vars in the sandbox");
 					return 0;
 				}
-			} break;
+			break;
 		}
-		it++;	
+		it++;
 	}
 
 	return 1;
