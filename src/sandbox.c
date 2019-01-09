@@ -25,6 +25,8 @@
 #include "SAPI.h"
 #include "TSRM.h"
 
+#include "zend_closures.h"
+
 zend_class_entry *php_sandbox_ce;
 zend_object_handlers php_sandbox_handlers;
 
@@ -36,6 +38,8 @@ PHP_METHOD(Sandbox, __construct)
 	zval          *configuration = NULL;
 
 	if (zend_parse_parameters_ex(ZEND_PARSE_PARAMS_QUIET, ZEND_NUM_ARGS(), "|a", &configuration) != SUCCESS) {
+		php_sandbox_monitor_set(sandbox->monitor, PHP_SANDBOX_ERROR);
+
 		zend_throw_error(NULL, "only optional configuration expected");
 		return;
 	}
@@ -56,8 +60,9 @@ PHP_METHOD(Sandbox, enter)
 {
 	php_sandbox_t *sandbox = php_sandbox_from(getThis());
 	php_sandbox_entry_point_t entry;
+	zval *closure;
 
-	if (zend_parse_parameters_ex(ZEND_PARSE_PARAMS_QUIET, ZEND_NUM_ARGS(), "f", &entry.fci, &entry.fcc) != SUCCESS) {
+	if (zend_parse_parameters_ex(ZEND_PARSE_PARAMS_QUIET, ZEND_NUM_ARGS(), "O", &closure, zend_ce_closure) != SUCCESS) {
 		zend_throw_error(NULL, "no entry point provided");
 		return;
 	}
@@ -67,15 +72,14 @@ PHP_METHOD(Sandbox, enter)
 		return;
 	}
 
-	if (php_sandbox_monitor_check(sandbox->monitor, PHP_SANDBOX_CLOSE|PHP_SANDBOX_DONE)) {
-		zend_throw_error(NULL, "sandbox closed");
+	if (php_sandbox_monitor_check(sandbox->monitor, PHP_SANDBOX_CLOSE|PHP_SANDBOX_DONE|PHP_SANDBOX_ERROR)) {
+		zend_throw_error(NULL, "sandbox unusable");
 
 		php_sandbox_monitor_unlock(sandbox->monitor);
 		return;
 	}
 
-	memcpy(&sandbox->entry.fci, &entry.fci, sizeof(zend_fcall_info));
-	memcpy(&sandbox->entry.fcc, &entry.fcc, sizeof(zend_fcall_info_cache));
+	sandbox->entry.point = (zend_function*) (((char*) Z_OBJ_P(closure)) + sizeof(zend_object));
 
 	php_sandbox_monitor_set(sandbox->monitor, PHP_SANDBOX_EXEC);
 	php_sandbox_monitor_unlock(sandbox->monitor);
@@ -92,7 +96,7 @@ PHP_METHOD(Sandbox, close)
 	php_sandbox_t *sandbox = 
 		php_sandbox_from(getThis());
 
-	if (php_sandbox_monitor_check(sandbox->monitor, PHP_SANDBOX_CLOSED)) {
+	if (php_sandbox_monitor_check(sandbox->monitor, PHP_SANDBOX_CLOSED|PHP_SANDBOX_ERROR)) {
 		return;
 	}
 
@@ -132,10 +136,11 @@ void php_sandbox_destroy(zend_object *o) {
 	php_sandbox_t *sandbox = 
 		php_sandbox_fetch(o);
 
-	if (!php_sandbox_monitor_check(sandbox->monitor, PHP_SANDBOX_CLOSED)) {
+	if (!php_sandbox_monitor_check(sandbox->monitor, PHP_SANDBOX_ERROR|PHP_SANDBOX_CLOSED)) {
 		php_sandbox_monitor_set(
 			sandbox->monitor, 
 			PHP_SANDBOX_CLOSE);
+		
 		php_sandbox_monitor_wait(
 			sandbox->monitor,
 			PHP_SANDBOX_DONE);
@@ -230,13 +235,12 @@ void* php_sandbox_routine(void *arg) {
 
 		zend_first_try {
 			zval rv;
-			php_sandbox_entry_point_t entry;
+			zend_fcall_info fci = empty_fcall_info;
+			zend_fcall_info_cache fcc = empty_fcall_info_cache;
 
-			memcpy(&entry, &sandbox->entry, sizeof(php_sandbox_entry_point_t));
-
-			entry.fci.retval = &rv;
-			entry.fcc.function_handler =
-				(zend_function*) php_sandbox_copy(entry.fcc.function_handler);
+			fci.size = sizeof(zend_fcall_info);
+			fci.retval = &rv;
+			fcc.function_handler = php_sandbox_copy(sandbox->entry.point);
 
 			ZVAL_UNDEF(&rv);
 
@@ -248,7 +252,7 @@ void* php_sandbox_routine(void *arg) {
 			}
 
 			zend_try {
-				zend_call_function(&entry.fci, &entry.fcc);
+				zend_call_function(&fci, &fcc);
 			} zend_end_try();
 
 			if (!Z_ISUNDEF(rv)) {
@@ -268,8 +272,8 @@ void* php_sandbox_routine(void *arg) {
 				}
 			}
 
-			destroy_op_array((zend_op_array*) entry.fcc.function_handler);
-			efree(entry.fcc.function_handler);
+			destroy_op_array((zend_op_array*) fcc.function_handler);
+			efree(fcc.function_handler);
 		} zend_end_try();
 
 		php_sandbox_monitor_set(sandbox->monitor, PHP_SANDBOX_WAIT);
@@ -278,6 +282,8 @@ void* php_sandbox_routine(void *arg) {
 	php_sandbox_monitor_set(sandbox->monitor, PHP_SANDBOX_DONE);
 
 	php_request_shutdown(NULL);
+
+	ts_free_thread();
 
 	pthread_exit(NULL);
 }

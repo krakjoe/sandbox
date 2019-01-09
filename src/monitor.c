@@ -40,8 +40,8 @@ int php_sandbox_monitor_lock(php_sandbox_monitor_t *monitor) {
 	return pthread_mutex_lock(&monitor->mutex);
 }
 
-zend_bool php_sandbox_monitor_check(php_sandbox_monitor_t *monitor, uint32_t state) {
-	return (monitor->state & state) == state;
+uint32_t php_sandbox_monitor_check(php_sandbox_monitor_t *monitor, uint32_t state) {
+	return (monitor->state & (state));
 }
 
 int php_sandbox_monitor_unlock(php_sandbox_monitor_t *monitor) {
