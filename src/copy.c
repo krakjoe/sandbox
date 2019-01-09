@@ -400,9 +400,18 @@ zend_function* php_sandbox_copy(zend_function *function) { /* {{{ */
 	op_array->scope = NULL;
 	op_array->prototype = NULL;
 	op_array->doc_comment = NULL;
+#if PHP_VERSION_ID >= 70400
+	{
+		void **run_time_cache = 
+			(void**) zend_arena_alloc(&CG(arena), op_array->cache_size);
+
+		ZEND_MAP_PTR_SET(op_array->run_time_cache, run_time_cache);
+
+		memset(run_time_cache, 0, sizeof(op_array->cache_size));
+	}
+#else
 	op_array->run_time_cache = (void*) ecalloc(1, op_array->cache_size);
-	
-	memset(op_array->run_time_cache, 0, op_array->cache_size);
+#endif
 
 	if (op_array->literals) {
 		op_array->literals = php_sandbox_copy_literals (literals, op_array->last_literal);
