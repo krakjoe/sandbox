@@ -224,6 +224,13 @@ zend_bool php_sandbox_copy_check(zend_execute_data *execute_data, zend_function 
 
 	while (it < end) {
 		switch (it->opcode) {
+			case ZEND_YIELD:
+			case ZEND_YIELD_FROM:
+				zend_throw_error(NULL,
+					"cannot yield directly from the sandbox on line %d",
+					it->lineno);
+				return 0;
+				
 			case ZEND_DECLARE_ANON_CLASS:
 				zend_throw_error(NULL,
 					"cannot declare anonymous class directly in the sandbox on line %d",
