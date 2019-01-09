@@ -81,8 +81,7 @@ PHP_METHOD(Sandbox, enter)
 	if (!php_sandbox_copy_check(sandbox, 
 		EG(current_execute_data)->prev_execute_data,
 		(zend_function*) (((char*)Z_OBJ_P(closure)) + sizeof(zend_object)), 
-		ZEND_NUM_ARGS() - 1, 
-		argv)) {
+		ZEND_NUM_ARGS() - 1, argv)) {
 		php_sandbox_monitor_unlock(sandbox->monitor);
 		return;
 	}
@@ -187,6 +186,86 @@ void php_sandbox_shutdown(void) {
 
 }
 
+static zend_always_inline void php_sandbox_execute(zend_function *function, zval *argv, zval *retval) {
+	zval rv;
+	zend_fcall_info fci = empty_fcall_info;
+	zend_fcall_info_cache fcc = empty_fcall_info_cache;
+
+	fci.size = sizeof(zend_fcall_info);
+	fci.retval = &rv;
+#if PHP_VERSION_ID < 70300
+	fcc.initialized = 1;
+#endif
+	fcc.function_handler = php_sandbox_copy(function);
+
+	if (!Z_ISUNDEF_P(argv)) {
+		zend_fcall_info_args(&fci, argv);
+	}
+
+	ZVAL_UNDEF(&rv);
+
+	zend_try {
+		zend_call_function(&fci, &fcc);
+	} zend_end_try();
+
+	if (!Z_ISUNDEF(rv)) {
+		switch (Z_TYPE(rv)) {
+			case IS_TRUE:
+			case IS_FALSE:
+			case IS_NULL:
+			case IS_LONG:
+			case IS_DOUBLE:
+				ZVAL_COPY(retval, &rv);
+			break;
+
+			case IS_STRING: {
+				zend_string *out = zend_string_init(
+						Z_STRVAL(rv), Z_STRLEN(rv), 1);
+				ZVAL_STR(retval, out);
+				zval_ptr_dtor(&rv);
+			} break;
+
+			default:
+				if (Z_REFCOUNTED(rv)) {
+					zval_ptr_dtor(&rv);
+				}
+		}
+	}
+
+	if (!Z_ISUNDEF_P(argv)) {
+		zend_fcall_info_args_clear(&fci, 1);
+	}
+
+	destroy_op_array((zend_op_array*) fcc.function_handler);
+	efree(fcc.function_handler);
+}
+
+static zend_always_inline void php_sandbox_configure(zval *configuration) {
+	zend_string *name;
+	zval        *value;
+
+	ZEND_HASH_FOREACH_STR_KEY_VAL(Z_ARRVAL_P(configuration), name, value) {
+		zend_string *chars;
+		zend_string *local = zend_string_dup(name, 1);
+
+		if (Z_TYPE_P(value) == IS_STRING) {
+			chars = Z_STR_P(value);
+		} else {
+			chars = zval_get_string(value);
+		}
+
+		zend_alter_ini_entry_chars(local, 
+			ZSTR_VAL(chars), ZSTR_LEN(chars), 
+			ZEND_INI_SYSTEM, ZEND_INI_STAGE_ACTIVATE);
+
+		if (Z_TYPE_P(value) != IS_STRING) {
+			zend_string_release(chars);
+		}
+
+		zend_string_release(local);
+	} ZEND_HASH_FOREACH_END();
+}
+
 void* php_sandbox_routine(void *arg) {	
 	php_sandbox_t *sandbox = (php_sandbox_t*) arg;
 	
@@ -205,29 +284,7 @@ void* php_sandbox_routine(void *arg) {
 	PG(auto_globals_jit) = 0;
 
 	if (!Z_ISUNDEF(sandbox->configuration)) {
-		zend_string *name;
-		zval        *value;
-
-		ZEND_HASH_FOREACH_STR_KEY_VAL(Z_ARRVAL(sandbox->configuration), name, value) {
-			zend_string *chars;
-			zend_string *local = zend_string_dup(name, 1);
-
-			if (Z_TYPE_P(value) == IS_STRING) {
-				chars = Z_STR_P(value);
-			} else {
-				chars = zval_get_string(value);
-			}
-
-			zend_alter_ini_entry_chars(local, 
-				ZSTR_VAL(chars), ZSTR_LEN(chars), 
-				ZEND_INI_SYSTEM, ZEND_INI_STAGE_ACTIVATE);
-
-			if (Z_TYPE_P(value) != IS_STRING) {
-				zend_string_release(chars);
-			}
-
-			zend_string_release(local);
-		} ZEND_HASH_FOREACH_END();
+		php_sandbox_configure(&sandbox->configuration);
 	}
 
 	php_sandbox_monitor_set(sandbox->monitor, PHP_SANDBOX_READY);
@@ -247,57 +304,10 @@ void* php_sandbox_routine(void *arg) {
 		}
 
 		zend_first_try {
-			zval rv;
-			zend_fcall_info fci = empty_fcall_info;
-			zend_fcall_info_cache fcc = empty_fcall_info_cache;
-
-			fci.size = sizeof(zend_fcall_info);
-			fci.retval = &rv;
-#if PHP_VERSION_ID < 70300
-			fcc.initialized = 1;
-#endif
-			fcc.function_handler = php_sandbox_copy(sandbox->entry.point);
-
-			if (!Z_ISUNDEF(sandbox->entry.argv)) {
-				zend_fcall_info_args(&fci, &sandbox->entry.argv);
-			}
-
-			ZVAL_UNDEF(&rv);
-
-			zend_try {
-				zend_call_function(&fci, &fcc);
-			} zend_end_try();
-
-			if (!Z_ISUNDEF(rv)) {
-				switch (Z_TYPE(rv)) {
-					case IS_TRUE:
-					case IS_FALSE:
-					case IS_NULL:
-					case IS_LONG:
-					case IS_DOUBLE:
-						ZVAL_COPY(&sandbox->entry.retval, &rv);
-					break;
-
-					case IS_STRING: {
-						zend_string *out = zend_string_init(
-								Z_STRVAL(rv), Z_STRLEN(rv), 1);
-						ZVAL_STR(&sandbox->entry.retval, out);
-						zval_ptr_dtor(&rv);
-					} break;
-
-					default:
-						if (Z_REFCOUNTED(rv)) {
-							zval_ptr_dtor(&rv);
-						}
-				}
-			}
-
-			if (!Z_ISUNDEF(sandbox->entry.argv)) {
-				zend_fcall_info_args_clear(&fci, 1);
-			}
-
-			destroy_op_array((zend_op_array*) fcc.function_handler);
-			efree(fcc.function_handler);
+			php_sandbox_execute(
+				sandbox->entry.point, 
+				&sandbox->entry.argv, 
+				&sandbox->entry.retval);
 		} zend_end_try();
 
 		php_sandbox_monitor_set(sandbox->monitor, PHP_SANDBOX_WAIT);
