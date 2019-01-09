@@ -194,6 +194,66 @@ static inline zend_arg_info* php_sandbox_copy_arginfo(zend_op_array *op_array, z
 	return info;
 } /* }}} */
 
+static zend_always_inline zend_bool php_sandbox_copying_lexical(zend_execute_data *execute_data, zend_function *function, zend_op *bind) { /* {{{ */
+	zend_op *opline, *end;
+
+	if (EX(func)->type != ZEND_USER_FUNCTION) {
+		return 0;
+	}
+	
+	opline = EX(func)->op_array.opcodes;
+	end    = opline + EX(func)->op_array.last;
+
+	while (opline < end) {
+		if (opline->opcode == ZEND_BIND_LEXICAL) {
+			if (zend_string_equals(
+				zend_get_compiled_variable_name((zend_op_array*)function, bind->op1.var), 
+				zend_get_compiled_variable_name((zend_op_array*)EX(func), opline->op2.var))) {
+				return 1;
+			}
+		}
+		opline++;
+	}
+
+	return 0;
+} /* }}} */
+
+zend_bool php_sandbox_copy_check(zend_execute_data *execute_data, zend_function * function) { /* {{{ */
+	zend_op *it = function->op_array.opcodes,
+		*end = it + function->op_array.last;
+
+	while (it < end) {
+		switch (it->opcode) {
+			case ZEND_DECLARE_ANON_CLASS:
+				zend_throw_error(NULL, 
+					"cannot declare anonymous classes directly in the sandbox");
+				return 0;
+
+			case ZEND_DECLARE_LAMBDA_FUNCTION:
+				zend_throw_error(NULL,
+					"cannot declare anonymous functions directly in the sandbox");
+				return 0;
+
+			case ZEND_DECLARE_CLASS:
+			case ZEND_DECLARE_INHERITED_CLASS:
+				zend_throw_error(NULL,
+					"cannot declare classes directly in the sandbox");
+				return 0;
+
+			case ZEND_BIND_STATIC: if (EX(func)->type == ZEND_USER_FUNCTION) {
+				if (php_sandbox_copying_lexical(execute_data, function, it)) {
+					zend_throw_error(NULL,
+						"cannot bind static vars in the sandbox");
+					return 0;
+				}
+			} break;
+		}
+		it++;	
+	}
+
+	return 1;
+} /* }}} */
+
 zend_function* php_sandbox_copy(zend_function *function) { /* {{{ */
 	zend_function  *copy;	
 	zend_op_array  *op_array;

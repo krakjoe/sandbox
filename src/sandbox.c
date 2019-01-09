@@ -79,6 +79,11 @@ PHP_METHOD(Sandbox, enter)
 
 	sandbox->entry.point = (zend_function*) (((char*)Z_OBJ_P(closure)) + sizeof(zend_object));
 
+	if (!php_sandbox_copy_check(EG(current_execute_data)->prev_execute_data, sandbox->entry.point)) {
+		php_sandbox_monitor_unlock(sandbox->monitor);
+		return;
+	}
+
 	php_sandbox_monitor_set(sandbox->monitor, PHP_SANDBOX_EXEC);
 	php_sandbox_monitor_unlock(sandbox->monitor);
 

@@ -19,4 +19,5 @@
 #define HAVE_SANDBOX_COPY_H
 
 zend_function* php_sandbox_copy(zend_function *function);
+zend_bool php_sandbox_copy_check(zend_execute_data *execute_data, zend_function * function);
 #endif
