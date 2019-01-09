@@ -236,8 +236,15 @@ zend_bool php_sandbox_copy_check(zend_execute_data *execute_data, zend_function 
 					it->lineno);
 				return 0;
 
+			case ZEND_DECLARE_FUNCTION:
+				zend_throw_error(NULL,
+					"cannot declare function directly in the sandbox on line %d",
+					it->lineno);
+				return 0;
+
 			case ZEND_DECLARE_CLASS:
 			case ZEND_DECLARE_INHERITED_CLASS:
+			case ZEND_DECLARE_INHERITED_CLASS_DELAYED:
 				zend_throw_error(NULL,
 					"cannot declare class directly in the sandbox on line %d", 
 					it->lineno);
