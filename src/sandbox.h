@@ -31,6 +31,7 @@ typedef struct _php_sandbox_entry_point_t {
 
 typedef struct _php_sandbox_t {
 	pthread_t thread;
+	void      ***creator;
 	void      ***context;
 	php_sandbox_monitor_t *monitor;
 	php_sandbox_entry_point_t entry;

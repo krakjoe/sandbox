@@ -215,7 +215,6 @@ zend_function* php_sandbox_copy(zend_function *function) { /* {{{ */
 	(*op_array->refcount) = 1;
 
 	op_array->fn_flags &= ~ ZEND_ACC_CLOSURE;
-	op_array->fn_flags &= ~ZEND_ACC_ARENA_ALLOCATED;
 	op_array->fn_flags &= ~ ZEND_ACC_DONE_PASS_TWO;
 	op_array->fn_flags |= ZEND_ACC_PUBLIC;
 	op_array->scope = NULL;

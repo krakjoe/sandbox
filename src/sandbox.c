@@ -22,6 +22,8 @@
 #include "copy.h"
 
 #include "php_main.h"
+#include "SAPI.h"
+#include "TSRM.h"
 
 zend_class_entry *php_sandbox_ce;
 zend_object_handlers php_sandbox_handlers;
@@ -47,7 +49,7 @@ PHP_METHOD(Sandbox, __construct)
 		return;
 	}
 
-	php_sandbox_monitor_wait(sandbox->monitor, PHP_SANDBOX_READY, 1);
+	php_sandbox_monitor_wait(sandbox->monitor, PHP_SANDBOX_READY);
 }
 
 PHP_METHOD(Sandbox, enter)
@@ -65,7 +67,7 @@ PHP_METHOD(Sandbox, enter)
 		return;
 	}
 
-	if (php_sandbox_monitor_check(sandbox->monitor, PHP_SANDBOX_CLOSE)) {
+	if (php_sandbox_monitor_check(sandbox->monitor, PHP_SANDBOX_CLOSE|PHP_SANDBOX_DONE)) {
 		zend_throw_error(NULL, "sandbox closed");
 
 		php_sandbox_monitor_unlock(sandbox->monitor);
@@ -75,11 +77,10 @@ PHP_METHOD(Sandbox, enter)
 	memcpy(&sandbox->entry.fci, &entry.fci, sizeof(zend_fcall_info));
 	memcpy(&sandbox->entry.fcc, &entry.fcc, sizeof(zend_fcall_info_cache));
 
-	php_sandbox_monitor_set(sandbox->monitor, PHP_SANDBOX_EXEC, 0);
-
+	php_sandbox_monitor_set(sandbox->monitor, PHP_SANDBOX_EXEC);
 	php_sandbox_monitor_unlock(sandbox->monitor);
 
-	php_sandbox_monitor_wait(sandbox->monitor, PHP_SANDBOX_WAIT, 1);
+	php_sandbox_monitor_wait(sandbox->monitor, PHP_SANDBOX_WAIT);
 
 	if (!Z_ISUNDEF(sandbox->entry.retval)) {
 		ZVAL_COPY(return_value, &sandbox->entry.retval);
@@ -91,8 +92,16 @@ PHP_METHOD(Sandbox, close)
 	php_sandbox_t *sandbox = 
 		php_sandbox_from(getThis());
 
+	if (php_sandbox_monitor_check(sandbox->monitor, PHP_SANDBOX_CLOSED)) {
+		return;
+	}
+
 	php_sandbox_monitor_set(
-		sandbox->monitor, PHP_SANDBOX_CLOSE, 1);
+		sandbox->monitor, PHP_SANDBOX_CLOSE);
+	php_sandbox_monitor_wait(
+		sandbox->monitor, PHP_SANDBOX_DONE);
+	php_sandbox_monitor_set(
+		sandbox->monitor, PHP_SANDBOX_CLOSED);
 }
 
 zend_function_entry php_sandbox_methods[] = {
@@ -111,8 +120,10 @@ zend_object* php_sandbox_create(zend_class_entry *type) {
 	sandbox->std.handlers = &php_sandbox_handlers;
 
 	sandbox->monitor = php_sandbox_monitor_create();
+	sandbox->creator = ts_resource(0);
 
 	ZVAL_UNDEF(&sandbox->entry.retval);
+	ZVAL_UNDEF(&sandbox->configuration);
 
 	return &sandbox->std;
 }
@@ -121,7 +132,15 @@ void php_sandbox_destroy(zend_object *o) {
 	php_sandbox_t *sandbox = 
 		php_sandbox_fetch(o);
 
-	php_sandbox_monitor_set(sandbox->monitor, PHP_SANDBOX_CLOSE, 1);
+	if (!php_sandbox_monitor_check(sandbox->monitor, PHP_SANDBOX_CLOSED)) {
+		php_sandbox_monitor_set(
+			sandbox->monitor, 
+			PHP_SANDBOX_CLOSE);
+		php_sandbox_monitor_wait(
+			sandbox->monitor,
+			PHP_SANDBOX_DONE);
+	}
+
 	php_sandbox_monitor_destroy(sandbox->monitor);
 
 	pthread_join(sandbox->thread, NULL);
@@ -147,15 +166,22 @@ void php_sandbox_shutdown(void) {
 
 }
 
-void* php_sandbox_routine(void *arg) {
-	php_sandbox_t *sandbox = (php_sandbox_t*) arg;	
+void* php_sandbox_routine(void *arg) {	
+	php_sandbox_t *sandbox = (php_sandbox_t*) arg;
+	
 	uint32_t state;
 
 	sandbox->context = ts_resource(0);
 
 	TSRMLS_CACHE_UPDATE();
 
-	php_request_startup();
+	SG(server_context) = (((sapi_globals_struct*) 
+		(*((void ***) sandbox->creator))[
+			TSRM_UNSHUFFLE_RSRC_ID(sapi_globals_id)
+	])->server_context);
+
+	PG(expose_php) = 0;
+	PG(auto_globals_jit) = 0;
 
 	if (!Z_ISUNDEF(sandbox->configuration)) {
 		zend_string *name;
@@ -172,7 +198,7 @@ void* php_sandbox_routine(void *arg) {
 
 			zend_alter_ini_entry_chars(name, 
 				ZSTR_VAL(chars), ZSTR_LEN(chars), 
-				ZEND_INI_SYSTEM, ZEND_INI_STAGE_STARTUP);
+				ZEND_INI_SYSTEM, ZEND_INI_STAGE_ACTIVATE);
 
 			if (Z_TYPE_P(value) != IS_STRING) {
 				zend_string_release(chars);
@@ -180,11 +206,17 @@ void* php_sandbox_routine(void *arg) {
 		} ZEND_HASH_FOREACH_END();
 	}
 
-	php_sandbox_monitor_set(sandbox->monitor, PHP_SANDBOX_READY, 1);
+	php_sandbox_monitor_set(sandbox->monitor, PHP_SANDBOX_READY);
+
+	php_request_startup();
+
+	SG(sapi_started)            = 0;
+	SG(headers_sent)            = 1;
+	SG(request_info).no_headers = 1;
 
 	ZVAL_UNDEF(&sandbox->entry.retval);
 
-	while ((state = php_sandbox_monitor_wait(sandbox->monitor, PHP_SANDBOX_EXEC|PHP_SANDBOX_CLOSE, 1))) {
+	while ((state = php_sandbox_monitor_wait(sandbox->monitor, PHP_SANDBOX_EXEC|PHP_SANDBOX_CLOSE))) {
 		if (state & PHP_SANDBOX_CLOSE) {
 			if (!Z_ISUNDEF(sandbox->entry.retval)) {
 				if (Z_REFCOUNTED(sandbox->entry.retval)) {
@@ -192,6 +224,7 @@ void* php_sandbox_routine(void *arg) {
 				}
 				ZVAL_UNDEF(&sandbox->entry.retval);
 			}
+			php_sandbox_monitor_set(sandbox->monitor, PHP_SANDBOX_WAIT);
 			break;
 		}
 
@@ -239,8 +272,10 @@ void* php_sandbox_routine(void *arg) {
 			efree(entry.fcc.function_handler);
 		} zend_end_try();
 
-		php_sandbox_monitor_set(sandbox->monitor, PHP_SANDBOX_WAIT, 1);
+		php_sandbox_monitor_set(sandbox->monitor, PHP_SANDBOX_WAIT);
 	}
+
+	php_sandbox_monitor_set(sandbox->monitor, PHP_SANDBOX_DONE);
 
 	php_request_shutdown(NULL);
 

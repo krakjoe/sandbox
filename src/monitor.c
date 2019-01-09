@@ -28,11 +28,6 @@ php_sandbox_monitor_t* php_sandbox_monitor_create(void) {
 			calloc(1, sizeof(php_sandbox_monitor_t));
 
 	pthread_mutexattr_init(&at);
-#if defined(PTHREAD_MUTEX_RECURSIVE) || defined(__FreeBSD__)
-	pthread_mutexattr_settype(&at, PTHREAD_MUTEX_RECURSIVE);
-#else
-	pthread_mutexattr_settype(&at, PTHREAD_MUTEX_RECURSIVE_NP);
-#endif
 	pthread_mutex_init(&monitor->mutex, &at);
 	pthread_mutexattr_destroy(&at);
 
@@ -50,61 +45,75 @@ zend_bool php_sandbox_monitor_check(php_sandbox_monitor_t *monitor, uint32_t sta
 }
 
 int php_sandbox_monitor_unlock(php_sandbox_monitor_t *monitor) {
-	pthread_mutex_unlock(&monitor->mutex);
+	return pthread_mutex_unlock(&monitor->mutex);
 }
 
-uint32_t php_sandbox_monitor_wait(php_sandbox_monitor_t *monitor, uint32_t state, zend_bool lock) {
+uint32_t php_sandbox_monitor_wait(php_sandbox_monitor_t *monitor, uint32_t state) {
 	uint32_t changed = FAILURE;
+	int      rc      = SUCCESS;
 
-	if (lock) {
-		php_sandbox_monitor_lock(monitor);
+	if (pthread_mutex_lock(&monitor->mutex) != SUCCESS) {
+		return FAILURE;
 	}
 
-	while (!(monitor->state & state)) {
-		if (pthread_cond_wait(
-				&monitor->condition, &monitor->mutex) != SUCCESS) {
-			php_sandbox_monitor_unlock(monitor);
+	while (!(changed = (monitor->state & state))) {
+
+		if ((rc = pthread_cond_wait(
+				&monitor->condition, &monitor->mutex)) != SUCCESS) {
+			pthread_mutex_unlock(&monitor->mutex);
+
+			return FAILURE;
+		}
+
+		if (monitor->state & (PHP_SANDBOX_DONE|PHP_SANDBOX_CLOSE)) {
+			changed = FAILURE;
+			pthread_mutex_unlock(&monitor->mutex);
+
 			return changed;
 		}
 	}
 
-	changed = monitor->state;
+	monitor->state ^= changed;
 
-	monitor->state &= ~state;
-
-	if (lock) {
-		php_sandbox_monitor_unlock(monitor);
+	if (pthread_mutex_unlock(&monitor->mutex) != SUCCESS) {
+		return FAILURE;
 	}
 
 	return changed;
 }
 
-void php_sandbox_monitor_set(php_sandbox_monitor_t *monitor, uint32_t state, zend_bool lock) {
-	if (lock) {
-		php_sandbox_monitor_lock(monitor);
-	}
-
+void php_sandbox_monitor_set(php_sandbox_monitor_t *monitor, uint32_t state) {
 	monitor->state |= state;
 
 	pthread_cond_signal(&monitor->condition);
-
-	if (lock) {
-		php_sandbox_monitor_unlock(monitor);
-	}
 }
 
-void php_sandbox_monitor_unset(php_sandbox_monitor_t *monitor, uint32_t state, zend_bool lock) {
-	if (lock) {
-		php_sandbox_monitor_lock(monitor);
-	}
+void php_sandbox_monitor_set_and_wait(php_sandbox_monitor_t *monitor, uint32_t set, uint32_t wait) {
+	uint32_t changed = FAILURE;
 
-	monitor->state &= ~state;
+	monitor->state |= set;
 
 	pthread_cond_signal(&monitor->condition);
 
-	if (lock) {
-		php_sandbox_monitor_unlock(monitor);
+	pthread_mutex_lock(&monitor->mutex);
+
+	while (!(changed = (monitor->state & wait))) {
+		if (pthread_cond_wait(
+			&monitor->condition, &monitor->mutex) != SUCCESS) {
+			pthread_mutex_unlock(&monitor->mutex);
+			return;
+		}
 	}
+
+	monitor->state &= ~changed;
+
+	pthread_mutex_unlock(&monitor->mutex);
+}
+
+void php_sandbox_monitor_unset(php_sandbox_monitor_t *monitor, uint32_t state) {
+	monitor->state &= ~state;
+
+	pthread_cond_signal(&monitor->condition);
 }
 
 void php_sandbox_monitor_destroy(php_sandbox_monitor_t *monitor) {
