@@ -186,7 +186,7 @@ void php_sandbox_shutdown(void) {
 
 }
 
-static zend_always_inline void php_sandbox_execute(zend_function *function, zval *argv, zval *retval) {
+static void php_sandbox_execute(zend_function *function, zval *argv, zval *retval) {
 	zval rv;
 	zend_fcall_info fci = empty_fcall_info;
 	zend_fcall_info_cache fcc = empty_fcall_info_cache;
