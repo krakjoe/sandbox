@@ -104,6 +104,8 @@ PHP_METHOD(Sandbox, close)
 		sandbox->monitor, PHP_SANDBOX_DONE);
 	php_sandbox_monitor_set(
 		sandbox->monitor, PHP_SANDBOX_CLOSED);
+
+	pthread_join(sandbox->thread, NULL);
 }
 
 zend_function_entry php_sandbox_methods[] = {
@@ -142,11 +144,11 @@ void php_sandbox_destroy(zend_object *o) {
 		php_sandbox_monitor_wait(
 			sandbox->monitor,
 			PHP_SANDBOX_DONE);
+
+		pthread_join(sandbox->thread, NULL);
 	}
 
 	php_sandbox_monitor_destroy(sandbox->monitor);
-
-	pthread_join(sandbox->thread, NULL);
 
 	zend_object_std_dtor(o);
 }
@@ -192,6 +194,7 @@ void* php_sandbox_routine(void *arg) {
 
 		ZEND_HASH_FOREACH_STR_KEY_VAL(Z_ARRVAL(sandbox->configuration), name, value) {
 			zend_string *chars;
+			zend_string *local = zend_string_dup(name, 1);
 
 			if (Z_TYPE_P(value) == IS_STRING) {
 				chars = Z_STR_P(value);
@@ -199,13 +202,15 @@ void* php_sandbox_routine(void *arg) {
 				chars = zval_get_string(value);
 			}
 
-			zend_alter_ini_entry_chars(name, 
+			zend_alter_ini_entry_chars(local, 
 				ZSTR_VAL(chars), ZSTR_LEN(chars), 
 				ZEND_INI_SYSTEM, ZEND_INI_STAGE_ACTIVATE);
 
 			if (Z_TYPE_P(value) != IS_STRING) {
 				zend_string_release(chars);
 			}
+
+			zend_string_release(local);
 		} ZEND_HASH_FOREACH_END();
 	}
 
