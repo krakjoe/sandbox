@@ -399,13 +399,10 @@ zend_function* php_sandbox_copy(zend_function *function) { /* {{{ */
 	op_array->fn_flags |= ZEND_ACC_PUBLIC;
 	op_array->scope = NULL;
 	op_array->prototype = NULL;
+	op_array->doc_comment = NULL;
 	op_array->run_time_cache = (void*) ecalloc(1, op_array->cache_size);
 	
 	memset(op_array->run_time_cache, 0, op_array->cache_size);
-
-	if (op_array->doc_comment) {
-		op_array->doc_comment = zend_string_copy(op_array->doc_comment);
-	}
 
 	if (op_array->literals) {
 		op_array->literals = php_sandbox_copy_literals (literals, op_array->last_literal);

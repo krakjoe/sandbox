@@ -110,6 +110,7 @@ PHP_METHOD(Sandbox, close)
 		php_sandbox_from(getThis());
 
 	if (php_sandbox_monitor_check(sandbox->monitor, PHP_SANDBOX_CLOSED|PHP_SANDBOX_ERROR)) {
+		zend_throw_error(NULL, "sandbox unusable");
 		return;
 	}
 

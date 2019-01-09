@@ -10,6 +10,7 @@ if (!extension_loaded('sandbox')) {
 <?php
 $sandbox = new sandbox\Runtime([
 	"include_path" => "dummy",
+	"cast_to_string" => 2.2
 ]);
 
 $sandbox->enter(function() {

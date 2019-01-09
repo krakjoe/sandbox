@@ -77,9 +77,7 @@ try {
 }
 
 try {
-	$sandbox->enter(function & () : int {
-		return [1,2,3];
-	});
+	$sandbox->enter(function & () : int {});
 } catch (Error $ex) {
 	var_dump($ex->getMessage());
 }

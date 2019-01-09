@@ -20,10 +20,20 @@ var_dump($sandbox->enter(function(float $dbl){
 
 var_dump($sandbox->enter(function(string $str){
 	return $str;
-}, ["hell"]));
+}, ["four"]));
+
+var_dump($sandbox->enter(function(string $str) : string {
+	return $str;
+}, ["to"]));
+
+var_dump($sandbox->enter(function(string ... $str) : string {
+	return sprintf("%s %s", $str[0], $str[1]);
+}, ["fourty", "two"]));
 ?>
 --EXPECT--
 int(42)
 float(4.2)
-string(4) "hell"
+string(4) "four"
+string(2) "to"
+string(10) "fourty two"
 

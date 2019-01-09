@@ -19,9 +19,16 @@ $sandbox->close();
 try {
 	$sandbox->enter(function(){});
 } catch (Error $e) {
+	echo "OK\n";
+}
+
+try {
+	$sandbox->close();
+} catch (Error $e) {
 	echo "OK";
 }
 ?>
 --EXPECT--
 int(10)
+OK
 OK
