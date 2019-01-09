@@ -40,7 +40,7 @@ PHP_METHOD(Sandbox, __construct)
 	if (zend_parse_parameters_ex(ZEND_PARSE_PARAMS_QUIET, ZEND_NUM_ARGS(), "|a", &configuration) != SUCCESS) {
 		php_sandbox_monitor_set(sandbox->monitor, PHP_SANDBOX_ERROR);
 
-		zend_throw_error(NULL, "only optional configuration expected");
+		zend_throw_error(NULL, "optional configuration array expected");
 		return;
 	}
 
@@ -59,10 +59,11 @@ PHP_METHOD(Sandbox, __construct)
 PHP_METHOD(Sandbox, enter)
 {
 	php_sandbox_t *sandbox = php_sandbox_from(getThis());
-	zval *closure;
+	zval *closure = NULL;
+	zval *argv = NULL;
 
-	if (zend_parse_parameters_ex(ZEND_PARSE_PARAMS_QUIET, ZEND_NUM_ARGS(), "O", &closure, zend_ce_closure) != SUCCESS) {
-		zend_throw_error(NULL, "no entry point provided");
+	if (zend_parse_parameters_ex(ZEND_PARSE_PARAMS_QUIET, ZEND_NUM_ARGS(), "O|a", &closure, zend_ce_closure, &argv) != SUCCESS) {
+		zend_throw_error(NULL, "Closure, or Closure and args expected");
 		return;
 	}
 
@@ -77,9 +78,11 @@ PHP_METHOD(Sandbox, enter)
 		return;
 	}
 
-	sandbox->entry.point = (zend_function*) (((char*)Z_OBJ_P(closure)) + sizeof(zend_object));
-
-	if (!php_sandbox_copy_check(EG(current_execute_data)->prev_execute_data, sandbox->entry.point)) {
+	if (!php_sandbox_copy_check(sandbox, 
+		EG(current_execute_data)->prev_execute_data,
+		(zend_function*) (((char*)Z_OBJ_P(closure)) + sizeof(zend_object)), 
+		ZEND_NUM_ARGS() - 1, 
+		argv)) {
 		php_sandbox_monitor_unlock(sandbox->monitor);
 		return;
 	}
@@ -90,7 +93,15 @@ PHP_METHOD(Sandbox, enter)
 	php_sandbox_monitor_wait(sandbox->monitor, PHP_SANDBOX_WAIT);
 
 	if (!Z_ISUNDEF(sandbox->entry.retval)) {
-		ZVAL_COPY(return_value, &sandbox->entry.retval);
+		if (Z_TYPE(sandbox->entry.retval) == IS_STRING) {
+			zend_string *rv = zend_string_init(
+						Z_STRVAL(sandbox->entry.retval), 
+						Z_STRLEN(sandbox->entry.retval), 0);
+
+			zend_string_release(Z_STR(sandbox->entry.retval));
+
+			RETURN_STR(rv);
+		} else 	ZVAL_COPY(return_value, &sandbox->entry.retval);
 	}
 }
 
@@ -231,12 +242,6 @@ void* php_sandbox_routine(void *arg) {
 
 	while ((state = php_sandbox_monitor_wait(sandbox->monitor, PHP_SANDBOX_EXEC|PHP_SANDBOX_CLOSE))) {
 		if (state & PHP_SANDBOX_CLOSE) {
-			if (!Z_ISUNDEF(sandbox->entry.retval)) {
-				if (Z_REFCOUNTED(sandbox->entry.retval)) {
-					zval_ptr_dtor(&sandbox->entry.retval);
-				}
-				ZVAL_UNDEF(&sandbox->entry.retval);
-			}
 			php_sandbox_monitor_set(sandbox->monitor, PHP_SANDBOX_WAIT);
 			break;
 		}
@@ -253,14 +258,11 @@ void* php_sandbox_routine(void *arg) {
 #endif
 			fcc.function_handler = php_sandbox_copy(sandbox->entry.point);
 
-			ZVAL_UNDEF(&rv);
-
-			if (!Z_ISUNDEF(sandbox->entry.retval)) {
-				if (Z_REFCOUNTED(sandbox->entry.retval)) {
-					zval_ptr_dtor(&sandbox->entry.retval);
-				}
-				ZVAL_UNDEF(&sandbox->entry.retval);
+			if (!Z_ISUNDEF(sandbox->entry.argv)) {
+				zend_fcall_info_args(&fci, &sandbox->entry.argv);
 			}
+
+			ZVAL_UNDEF(&rv);
 
 			zend_try {
 				zend_call_function(&fci, &fcc);
@@ -276,11 +278,22 @@ void* php_sandbox_routine(void *arg) {
 						ZVAL_COPY(&sandbox->entry.retval, &rv);
 					break;
 
+					case IS_STRING: {
+						zend_string *out = zend_string_init(
+								Z_STRVAL(rv), Z_STRLEN(rv), 1);
+						ZVAL_STR(&sandbox->entry.retval, out);
+						zval_ptr_dtor(&rv);
+					} break;
+
 					default:
 						if (Z_REFCOUNTED(rv)) {
 							zval_ptr_dtor(&rv);
 						}
 				}
+			}
+
+			if (!Z_ISUNDEF(sandbox->entry.argv)) {
+				zend_fcall_info_args_clear(&fci, 1);
 			}
 
 			destroy_op_array((zend_op_array*) fcc.function_handler);

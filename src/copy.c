@@ -173,17 +173,6 @@ static inline zend_arg_info* php_sandbox_copy_arginfo(zend_op_array *op_array, z
 	while (it < end) {
 		if (info[it].name)
 			info[it].name = zend_string_copy(old[it].name);
-#if PHP_VERSION_ID >= 70200
-		if (ZEND_TYPE_IS_SET(old[it].type) && ZEND_TYPE_IS_CLASS(old[it].type)) {
-			info[it].type = ZEND_TYPE_ENCODE_CLASS(
-				zend_string_copy(
-					ZEND_TYPE_NAME(info[it].type)), 
-				ZEND_TYPE_ALLOW_NULL(info[it].type));
-		}
-#else
-		if (info[it].class_name)
-			info[it].class_name = zend_string_copy(old[it].class_name);
-#endif
 		it++;
 	}
 	
@@ -218,9 +207,117 @@ static zend_always_inline zend_bool php_sandbox_copying_lexical(zend_execute_dat
 	return 0;
 } /* }}} */
 
-zend_bool php_sandbox_copy_check(zend_execute_data *execute_data, zend_function * function) { /* {{{ */
+zend_bool php_sandbox_copy_arginfo_check(zend_function *function) { /* {{{ */
+	zend_arg_info *it, *end;
+	int argc = 1;
+
+	if (!function->op_array.arg_info) {
+		return 1;
+	}
+
+	if (function->common.fn_flags & ZEND_ACC_HAS_RETURN_TYPE) {
+		it = function->op_array.arg_info - 1;
+
+#if PHP_VERSION_ID >= 70200
+		if (ZEND_TYPE_IS_SET(it->type) && (ZEND_TYPE_CODE(it->type) == IS_OBJECT || ZEND_TYPE_IS_CLASS(it->type))) {
+#else
+		if (it->type_hint == IS_OBJECT || it->class_name) {
+#endif
+			zend_throw_error(NULL,
+				"cannot return an object directly from the sandbox");
+			return 0;
+		}
+
+#if PHP_VERSION_ID >= 70200
+		if (ZEND_TYPE_IS_SET(it->type) && ZEND_TYPE_CODE(it->type) == IS_ARRAY) {
+#else
+		if (it->type_hint == IS_ARRAY) {
+#endif
+			zend_throw_error(NULL,
+				"cannot return an array directly from the sandbox");
+			return 0;
+		}
+
+		if (it->pass_by_reference) {
+			zend_throw_error(NULL,
+				"cannot return by reference directly from the sandbox");
+			return 0;
+		}
+	}
+
+	it = function->op_array.arg_info;
+	end = it + function->op_array.num_args;
+
+	if (function->common.fn_flags & ZEND_ACC_VARIADIC) {
+		end++;
+	}
+
+	while (it < end) {
+#if PHP_VERSION_ID >= 70200
+		if (ZEND_TYPE_IS_SET(it->type) && (ZEND_TYPE_CODE(it->type) == IS_OBJECT || ZEND_TYPE_IS_CLASS(it->type))) {
+#else
+		if (it->type_hint == IS_OBJECT || it->class_name) {
+#endif
+			zend_throw_error(NULL,
+				"cannot pass an object directly to the sandbox at argument %d", argc);
+			return 0;
+		}
+
+#if PHP_VERSION_ID >= 70200
+		if (ZEND_TYPE_IS_SET(it->type) && ZEND_TYPE_CODE(it->type) == IS_ARRAY) {
+#else
+		if (it->type_hint == IS_ARRAY) {
+#endif
+			zend_throw_error(NULL,
+				"cannot pass an array directly to the sandbox at argument %d", argc);
+			return 0;
+		}
+
+		if (it->pass_by_reference) {
+			zend_throw_error(NULL,
+				"cannot pass by reference directly to the sandbox at argument %d", argc);
+			return 0;
+		}
+		it++;
+		argc++;
+	}
+
+	return 1;
+} /* }}} */
+
+static zend_always_inline zend_bool php_sandbox_copy_argv_check(zval *args) { /* {{{ */
+	zval *arg;
+	int   argc = 1;
+
+	ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(args), arg) {
+		if (Z_TYPE_P(arg) == IS_OBJECT) {
+			zend_throw_error(NULL, 
+				"cannot pass an object directly to the sandbox at argument %d", argc);
+			return 0;
+		}
+
+		if (Z_TYPE_P(arg) == IS_ARRAY) {
+			zend_throw_error(NULL, 
+				"cannot pass an array directly to the sandbox at argument %d", argc);
+			return 0;
+		}
+		argc++;	
+	} ZEND_HASH_FOREACH_END();
+
+	return 1;
+} /* }}} */
+
+zend_bool php_sandbox_copy_check(php_sandbox_t *sandbox, zend_execute_data *execute_data, zend_function * function, int argc, zval *argv) { /* {{{ */
 	zend_op *it = function->op_array.opcodes,
 		*end = it + function->op_array.last;
+
+	if (!php_sandbox_copy_arginfo_check(function)) {
+		return 0;
+	}
+
+	if (argc && !php_sandbox_copy_argv_check(argv)) {
+		return 0;
+	}
 
 	while (it < end) {
 		switch (it->opcode) {
@@ -267,6 +364,12 @@ zend_bool php_sandbox_copy_check(zend_execute_data *execute_data, zend_function 
 		}
 		it++;
 	}
+
+	sandbox->entry.point = function;
+
+	if (argc) {
+		ZVAL_COPY_VALUE(&sandbox->entry.argv, argv);
+	} else  ZVAL_UNDEF(&sandbox->entry.argv);
 
 	return 1;
 } /* }}} */

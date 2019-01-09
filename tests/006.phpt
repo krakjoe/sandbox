@@ -15,5 +15,5 @@ try {
 }
 ?>
 --EXPECT--
-string(36) "only optional configuration expected"
+string(37) "optional configuration array expected"
 

@@ -30,11 +30,11 @@ class sandbox\Runtime {
 	
 	/**
 	* Shall enter into the thread at the given entry point
-	* @param Closure to execute in the sandbox
-	* @throws Error if the sandbox is unusable
-	* Note: simple scalars may be copied out
+	* @param entry point for sandbox
+	* @param array arguments for closure
+	* @throws Error if $closure or $argv are not valid
 	**/
-	public function enter(Closure closure) : mixed;
+	public function enter(Closure $closure, array $argv = []) : mixed;
 
 	/*
 	* Shall close the sandbox
@@ -43,6 +43,25 @@ class sandbox\Runtime {
 	public function close();
 }
 ```
+
+Sandboxing
+==========
+
+By it's nature, a sandbox is an isolated environment; Things may go very badly wrong in the sandbox environment and not effect the environment that created it. This means that we must try very hard to limit the influence each environment has on the other. So the prototype and instructions of entry point ```Closures``` are verified to ensure they will not reduce or break isolation.
+
+In practice this means that entry point closures must not:
+
+  * accept or return by reference
+  * accept or return non-scalar values (array, object)
+  * execute a limited set of instructions
+
+Instructions prohibited directly in the sandbox are:
+
+  * declare (anonymous) function
+  * declare (anonymous) class
+  * lexical scope access
+
+Nothing is prohibited in the files which the sandbox may include, but allowing these actions directly in the code which the sandbox executes at entry would break the isolation of the sandbox such that we couldn't be sure the system would remain stable.
 
 Features
 ========

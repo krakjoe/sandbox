@@ -16,5 +16,6 @@ try {
 }
 ?>
 --EXPECT--
-string(23) "no entry point provided"
+string(37) "Closure, or Closure and args expected"
+
 

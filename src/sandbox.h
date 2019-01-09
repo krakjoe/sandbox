@@ -25,6 +25,7 @@ extern zend_class_entry *php_sandbox_ce;
 
 typedef struct _php_sandbox_entry_point_t {
 	zend_function *point;
+	zval argv;
 	zval retval;
 } php_sandbox_entry_point_t;
 
