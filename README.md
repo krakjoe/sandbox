@@ -7,7 +7,7 @@ sandbox
 
 runkit used to contain a sandbox that used TSRM to run PHP code in isolation. PHP7 still has TSRM, however, since it uses honest to goodness thread local storage, and in addition, caches TSRM storage locally in each binary (one in php, one in runkit.so and so on), the same hacks are not possible.
 
-In PHP7 we must create the actual thread for the sandbox, but this extension does not give you userland threading: While we must use a thread for the sandbox, we do not execute any (user) code in parallel. We dispatch Closures to a user thread and block while they execute.
+In PHP7 we must create the actual thread for the sandbox, but this extension does not give you userland threading: While we must use a thread for the sandbox, we do not execute any (user) code in parallel. We dispatch Closures to a thread and block while they execute.
 
 Requirements
 ============
