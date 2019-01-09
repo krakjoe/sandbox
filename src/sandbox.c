@@ -59,7 +59,6 @@ PHP_METHOD(Sandbox, __construct)
 PHP_METHOD(Sandbox, enter)
 {
 	php_sandbox_t *sandbox = php_sandbox_from(getThis());
-	php_sandbox_entry_point_t entry;
 	zval *closure;
 
 	if (zend_parse_parameters_ex(ZEND_PARSE_PARAMS_QUIET, ZEND_NUM_ARGS(), "O", &closure, zend_ce_closure) != SUCCESS) {
