@@ -73,13 +73,12 @@ PHP_METHOD(Sandbox, enter)
 	}
 
 	if (php_sandbox_monitor_check(sandbox->monitor, PHP_SANDBOX_CLOSE|PHP_SANDBOX_DONE|PHP_SANDBOX_ERROR)) {
-		zend_throw_error(NULL, "sandbox unusable");
-
 		php_sandbox_monitor_unlock(sandbox->monitor);
+		zend_throw_error(NULL, "sandbox unusable");
 		return;
 	}
 
-	sandbox->entry.point = (zend_function*) (((char*) Z_OBJ_P(closure)) + sizeof(zend_object));
+	sandbox->entry.point = (zend_function*) (((char*)Z_OBJ_P(closure)) + sizeof(zend_object));
 
 	php_sandbox_monitor_set(sandbox->monitor, PHP_SANDBOX_EXEC);
 	php_sandbox_monitor_unlock(sandbox->monitor);
@@ -240,6 +239,9 @@ void* php_sandbox_routine(void *arg) {
 
 			fci.size = sizeof(zend_fcall_info);
 			fci.retval = &rv;
+#if PHP_VERSION_ID < 70300
+			fcc.initialized = 1;
+#endif
 			fcc.function_handler = php_sandbox_copy(sandbox->entry.point);
 
 			ZVAL_UNDEF(&rv);
