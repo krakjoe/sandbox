@@ -32,6 +32,10 @@ zend_object_handlers php_sandbox_handlers;
 
 void* php_sandbox_routine(void *arg);
 
+typedef int (*php_sapi_deactivate_t)(void);
+
+php_sapi_deactivate_t php_sapi_deactivate_function;
+
 PHP_METHOD(Sandbox, __construct)
 {
 	php_sandbox_t *sandbox = php_sandbox_from(getThis());
@@ -181,10 +185,12 @@ void php_sandbox_startup(void) {
 
 	php_sandbox_ce = zend_register_internal_class(&ce);
 	php_sandbox_ce->create_object = php_sandbox_create;
+
+	php_sapi_deactivate_function = sapi_module.deactivate;
 }
 
 void php_sandbox_shutdown(void) {
-
+	sapi_module.deactivate = php_sapi_deactivate_function;
 }
 
 static void php_sandbox_execute(zend_function *function, zval *argv, zval *retval) {
