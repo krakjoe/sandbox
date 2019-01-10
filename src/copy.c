@@ -436,7 +436,14 @@ zend_function* php_sandbox_copy(zend_function *function) { /* {{{ */
 	}
 
 	if (op_array->static_variables) {
+#if PHP_VERSION_ID >= 70400
+		ZEND_MAP_PTR_NEW(op_array->static_variables_ptr);
+		
+		op_array->fn_flags |= ZEND_ACC_IMMUTABLE;
+#else
 		op_array->static_variables = php_sandbox_copy_statics(op_array->static_variables);
+#endif
+
 	}
 
 	return copy;
