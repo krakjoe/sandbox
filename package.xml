@@ -14,19 +14,19 @@
 badly wrong in the sandbox environment and not effect the environment that
 created it. This means that we must try very hard to limit the influence each
 environment has on the other. So the prototype and instructions of entry point
-```Closures``` are verified to ensure they will not reduce or break isolation.
+"Closures" are verified to ensure they will not reduce or break isolation.
 
 In practice this means entry point closures must not:
 
-  * accept or return by reference
-  * accept or return non-scalar values (array, object)
-  * execute a limited set of instructions
+* accept or return by reference
+* accept or return non-scalar values (array, object)
+* execute a limited set of instructions
 
 Instructions prohibited directly in the sandbox are:
 
-  * declare (anonymous) function
-  * declare (anonymous) class
-  * lexical scope access
+* declare (anonymous) function
+* declare (anonymous) class
+* lexical scope access
 
 Nothing is prohibited in the files which the sandbox may include, but allowing
 these actions directly in the code which the sandbox executes at entry would
