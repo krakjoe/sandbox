@@ -187,6 +187,8 @@ void php_sandbox_startup(void) {
 	php_sandbox_ce->create_object = php_sandbox_create;
 
 	php_sapi_deactivate_function = sapi_module.deactivate;
+
+	sapi_module.deactivate = NULL;
 }
 
 void php_sandbox_shutdown(void) {
