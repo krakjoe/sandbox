@@ -25,6 +25,8 @@
 
 #include <Zend/zend_vm.h>
 
+extern zend_string* php_sandbox_main;
+
 /* {{{ */
 static inline HashTable* php_sandbox_copy_statics(HashTable *old) {
 	return zend_array_dup(old);
@@ -390,7 +392,7 @@ zend_function* php_sandbox_copy(zend_function *function) { /* {{{ */
 	literals = op_array->literals;
 	arg_info = op_array->arg_info;
 
-	op_array->function_name = NULL;
+	op_array->function_name = zend_string_copy(php_sandbox_main);
 	op_array->refcount = (uint32_t*) emalloc(sizeof(uint32_t));
 	(*op_array->refcount) = 1;
 
@@ -403,7 +405,7 @@ zend_function* php_sandbox_copy(zend_function *function) { /* {{{ */
 #if PHP_VERSION_ID >= 70400
 	ZEND_MAP_PTR_NEW(op_array->run_time_cache);
 #else
-	op_array->run_time_cache = (void*) ecalloc(1, op_array->cache_size);
+	op_array->run_time_cache = NULL;
 #endif
 
 	if (op_array->literals) {

@@ -28,9 +28,12 @@
 #include "zend_closures.h"
 #include "zend_exceptions.h"
 
+#define php_sandbox_exception(m, ...) zend_throw_exception_ex(php_sandbox_exception_ce, 0, m, ##__VA_ARGS__)
+
 zend_class_entry *php_sandbox_ce;
 zend_class_entry *php_sandbox_exception_ce;
 zend_object_handlers php_sandbox_handlers;
+zend_string *php_sandbox_main;
 
 void* php_sandbox_routine(void *arg);
 
@@ -38,7 +41,13 @@ typedef int (*php_sapi_deactivate_t)(void);
 
 php_sapi_deactivate_t php_sapi_deactivate_function;
 
-#define php_sandbox_exception(m, ...) zend_throw_exception_ex(php_sandbox_exception_ce, 0, m, ##__VA_ARGS__)
+ZEND_BEGIN_MODULE_GLOBALS(sandbox)
+	zend_bool sandbox;	
+ZEND_END_MODULE_GLOBALS(sandbox)
+
+ZEND_DECLARE_MODULE_GLOBALS(sandbox);
+
+#define ZG(v) ZEND_TSRMG(sandbox_globals_id, zend_sandbox_globals *, v)
 
 PHP_METHOD(Sandbox, __construct)
 {
@@ -49,6 +58,13 @@ PHP_METHOD(Sandbox, __construct)
 		php_sandbox_monitor_set(sandbox->monitor, PHP_SANDBOX_ERROR);
 
 		php_sandbox_exception("optional configuration array expected");
+		return;
+	}
+
+	if (ZG(sandbox)) {
+		php_sandbox_monitor_set(sandbox->monitor, PHP_SANDBOX_ERROR);
+
+		php_sandbox_exception("sandboxes cannot create sandboxes");
 		return;
 	}
 
@@ -184,8 +200,14 @@ void php_sandbox_destroy(zend_object *o) {
 	zend_object_std_dtor(o);
 }
 
+static void php_sandbox_globals_memset(zend_sandbox_globals *zg) {
+	memset(zg, 0, sizeof(zend_sandbox_globals));
+}
+
 void php_sandbox_startup(void) {
 	zend_class_entry ce;
+	
+	ZEND_INIT_MODULE_GLOBALS(sandbox, php_sandbox_globals_memset, NULL);
 
 	memcpy(&php_sandbox_handlers, zend_get_std_object_handlers(), sizeof(zend_object_handlers));
 
@@ -204,10 +226,14 @@ void php_sandbox_startup(void) {
 	php_sapi_deactivate_function = sapi_module.deactivate;
 
 	sapi_module.deactivate = NULL;
+
+	php_sandbox_main = zend_string_init(ZEND_STRL("\\sandbox\\Runtime::enter"), 1);
 }
 
 void php_sandbox_shutdown(void) {
 	sapi_module.deactivate = php_sapi_deactivate_function;
+
+	zend_string_release(php_sandbox_main);
 }
 
 static void php_sandbox_execute(php_sandbox_monitor_t *monitor, zend_function *function, zval *argv, zval *retval) {
@@ -308,7 +334,8 @@ void* php_sandbox_routine(void *arg) {
 			TSRM_UNSHUFFLE_RSRC_ID(sapi_globals_id)
 	])->server_context);
 
-	PG(expose_php) = 0;
+	ZG(sandbox)          = 1;
+	PG(expose_php)       = 0;
 	PG(auto_globals_jit) = 0;
 
 	if (!Z_ISUNDEF(sandbox->configuration)) {

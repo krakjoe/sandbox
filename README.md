@@ -18,7 +18,7 @@ Instructions prohibited directly in the sandbox are:
   * declare (anonymous) class
   * lexical scope access
 
-Nothing is prohibited in the files which the sandbox may include, but allowing these actions directly in the code which the sandbox executes at entry would break the isolation of the sandbox such that we couldn't be sure the system would remain stable.
+No instructions are prohibited in the files which the sandbox may include, but allowing these instructions directly in the code which the sandbox executes at entry would break the isolation of the sandbox such that we couldn't be sure the system would remain stable.
 
 With these restrictions in place, we can be sure that a sandbox may do anything up to but excluding making PHP segfault, and not effect the environment that created it.
 
