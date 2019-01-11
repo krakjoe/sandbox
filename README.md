@@ -38,13 +38,14 @@ class sandbox\Runtime {
 	/**
 	* Shall construct a new sandbox thread
         * @param array optional ini configuration
+	* @throws \sandbox\Exception if the sandbox could not be created
 	*/
 	public function __construct(array $ini = []);
 	
 	/**
 	* Shall enter into the thread at the given entry point
 	* @param entry point for sandbox
-	* @param array arguments for closure
+	* @param array argv for closure
 	* @throws \sandbox\Exception if $closure or $argv are not valid
 	* @throws \sandbox\Exception if $closure bails
 	**/
@@ -52,7 +53,7 @@ class sandbox\Runtime {
 
 	/*
 	* Shall close the sandbox
-	* @throws Error if the sandbox is unusable
+	* @throws \sandbox\Exception if the sandbox is unusable
 	*/
 	public function close();
 }
