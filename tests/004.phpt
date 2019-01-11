@@ -18,13 +18,13 @@ $sandbox->close();
 
 try {
 	$sandbox->enter(function(){});
-} catch (Error $e) {
+} catch (\sandbox\Exception $e) {
 	echo "OK\n";
 }
 
 try {
 	$sandbox->close();
-} catch (Error $e) {
+} catch (\sandbox\Exception $e) {
 	echo "OK";
 }
 ?>

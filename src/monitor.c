@@ -88,6 +88,12 @@ void php_sandbox_monitor_set(php_sandbox_monitor_t *monitor, uint32_t state) {
 	pthread_cond_signal(&monitor->condition);
 }
 
+void php_sandbox_monitor_unset(php_sandbox_monitor_t *monitor, uint32_t state) {
+	monitor->state &= ~state;
+
+	pthread_cond_signal(&monitor->condition);
+}
+
 void php_sandbox_monitor_destroy(php_sandbox_monitor_t *monitor) {
 	pthread_mutex_destroy(&monitor->mutex);
 	pthread_cond_destroy(&monitor->condition);

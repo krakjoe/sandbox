@@ -45,7 +45,8 @@ class sandbox\Runtime {
 	* Shall enter into the thread at the given entry point
 	* @param entry point for sandbox
 	* @param array arguments for closure
-	* @throws Error if $closure or $argv are not valid
+	* @throws \sandbox\Exception if $closure or $argv are not valid
+	* @throws \sandbox\Exception if $closure bails
 	**/
 	public function enter(Closure $closure, array $argv = []) : mixed;
 
