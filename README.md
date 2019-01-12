@@ -2,6 +2,7 @@ sandbox
 =======
 
 [![Build Status](https://travis-ci.org/krakjoe/sandbox.svg?branch=develop)](https://travis-ci.org/krakjoe/sandbox)
+[![Build status](https://ci.appveyor.com/api/projects/status/j78jcoc3vg3ptg54?svg=true)](https://ci.appveyor.com/project/krakjoe/sandbox)
 [![Coverage Status](https://coveralls.io/repos/github/krakjoe/sandbox/badge.svg?branch=develop)](https://coveralls.io/github/krakjoe/sandbox)
 
 A sandbox is an isolated environment (a thread in our case); Things may go very badly wrong in the sandbox environment and not effect the environment that created it. This means that we must try very hard to limit the influence each environment has on the other. So the prototype and instructions of entry point ```Closures``` are verified to ensure they will not reduce or break isolation.
