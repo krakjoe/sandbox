@@ -376,5 +376,7 @@ void* php_sandbox_routine(void *arg) {
 	ts_free_thread();
 
 	pthread_exit(NULL);
+
+	return NULL;
 }
 #endif
