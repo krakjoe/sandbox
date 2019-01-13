@@ -123,15 +123,11 @@ PHP_METHOD(Sandbox, enter)
 	}
 
 	if (!Z_ISUNDEF(sandbox->entry.retval)) {
-		if (Z_TYPE(sandbox->entry.retval) == IS_STRING) {
-			zend_string *rv = zend_string_init(
-						Z_STRVAL(sandbox->entry.retval), 
-						Z_STRLEN(sandbox->entry.retval), 0);
+		php_sandbox_copy_zval(return_value, &sandbox->entry.retval, 0);
 
-			zend_string_release(Z_STR(sandbox->entry.retval));
-
-			RETURN_STR(rv);
-		} else 	ZVAL_COPY(return_value, &sandbox->entry.retval);
+		if (Z_REFCOUNTED(sandbox->entry.retval)) {
+			php_sandbox_zval_dtor(&sandbox->entry.retval);
+		}
 	}
 }
 
@@ -263,26 +259,10 @@ static void php_sandbox_execute(php_sandbox_monitor_t *monitor, zend_function *f
 	} zend_end_try();
 
 	if (rc == SUCCESS && !Z_ISUNDEF(rv)) {
-		switch (Z_TYPE(rv)) {
-			case IS_TRUE:
-			case IS_FALSE:
-			case IS_NULL:
-			case IS_LONG:
-			case IS_DOUBLE:
-				ZVAL_COPY(retval, &rv);
-			break;
+		php_sandbox_copy_zval(retval, &rv, 1);
 
-			case IS_STRING: {
-				zend_string *out = zend_string_init(
-						Z_STRVAL(rv), Z_STRLEN(rv), 1);
-				ZVAL_STR(retval, out);
-				zval_ptr_dtor(&rv);
-			} break;
-
-			default:
-				if (Z_REFCOUNTED(rv)) {
-					zval_ptr_dtor(&rv);
-				}
+		if (Z_REFCOUNTED(rv)) {
+			zval_ptr_dtor(&rv);
 		}
 	}
 

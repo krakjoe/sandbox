@@ -25,7 +25,93 @@
 
 #include <Zend/zend_vm.h>
 
+#ifndef GC_SET_REFCOUNT
+# define GC_SET_REFCOUNT(ref, rc) (GC_REFCOUNT(ref) = (rc))
+#endif
+
 extern zend_string* php_sandbox_main;
+
+static const uint32_t uninitialized_bucket[-HT_MIN_MASK] = {HT_INVALID_IDX, HT_INVALID_IDX};
+
+static zend_always_inline void* php_sandbox_copy_mem(void *source, size_t size, zend_bool persistent) {
+	void *destination = (void*) pemalloc(size, persistent);
+
+	memcpy(destination, source, size);
+
+	return destination;
+}
+
+HashTable *php_sandbox_copy_hash(HashTable *source, zend_bool persistent);
+
+void php_sandbox_copy_zval(zval *dest, zval *source, zend_bool persistent) {
+	switch (Z_TYPE_P(source)) {
+		case IS_NULL:
+		case IS_TRUE:
+		case IS_FALSE:
+		case IS_LONG:
+		case IS_DOUBLE:
+			ZVAL_DUP(dest, source);
+		break;
+
+		case IS_STRING:
+			ZVAL_STR(dest, zend_string_init(Z_STRVAL_P(source), Z_STRLEN_P(source), persistent));
+		break;
+
+		case IS_ARRAY:
+			ZVAL_ARR(dest, php_sandbox_copy_hash(Z_ARRVAL_P(source), persistent));
+		break;
+
+		default:
+			ZVAL_BOOL(dest, zend_is_true(source));
+	}
+}
+
+HashTable *php_sandbox_copy_hash(HashTable *source, zend_bool persistent) {
+	HashTable *ht = (HashTable*) pemalloc(sizeof(HashTable), persistent);
+	uint32_t idx;
+
+	memcpy(ht, source, sizeof(HashTable));
+	
+	GC_SET_REFCOUNT(ht, 1);
+	GC_TYPE_INFO(ht) = persistent ? IS_ARRAY|IS_ARRAY_PERSISTENT : IS_ARRAY;
+
+	ht->pDestructor = php_sandbox_zval_dtor;
+#if PHP_VERSION_ID < 70300
+	ht->u.flags |= HASH_FLAG_APPLY_PROTECTION;
+#endif
+
+	ht->u.flags |= HASH_FLAG_STATIC_KEYS;
+	if (ht->nNumUsed == 0) {
+		ht->u.flags &= ~(HASH_FLAG_INITIALIZED|HASH_FLAG_PACKED);
+		ht->nNextFreeElement = 0;
+		ht->nTableMask = HT_MIN_MASK;
+		HT_SET_DATA_ADDR(ht, &uninitialized_bucket);
+		return ht;
+	}
+
+	ht->nNextFreeElement = 0;
+	ht->nInternalPointer = HT_INVALID_IDX;
+	HT_SET_DATA_ADDR(ht, php_sandbox_copy_mem(HT_GET_DATA_ADDR(ht), HT_USED_SIZE(ht), persistent));
+	for (idx = 0; idx < ht->nNumUsed; idx++) {
+		Bucket *p = ht->arData + idx;
+		if (Z_TYPE(p->val) == IS_UNDEF) continue;
+
+		if (ht->nInternalPointer == HT_INVALID_IDX) {
+			ht->nInternalPointer = idx;
+		}
+
+		if (p->key) {
+			p->key = zend_string_init(ZSTR_VAL(p->key), ZSTR_LEN(p->key), persistent);
+			ht->u.flags &= ~HASH_FLAG_STATIC_KEYS;
+		} else if ((zend_long) p->h >= (zend_long) ht->nNextFreeElement) {
+			ht->nNextFreeElement = p->h + 1;
+		}
+
+		php_sandbox_copy_zval(&p->val, &p->val, persistent);
+	}
+
+	return ht;
+}
 
 /* {{{ */
 static inline HashTable* php_sandbox_copy_statics(HashTable *old) {

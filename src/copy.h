@@ -19,5 +19,19 @@
 #define HAVE_SANDBOX_COPY_H
 
 zend_function* php_sandbox_copy(zend_function *function);
+void php_sandbox_copy_zval(zval *dest, zval *source, zend_bool persistent);
 zend_bool php_sandbox_copy_check(php_sandbox_t *sandbox, zend_execute_data *execute_data, zend_function * function, int argc, zval *argv);
+
+static zend_always_inline void php_sandbox_zval_dtor(zval *zv) {
+	if (Z_TYPE_P(zv) == IS_ARRAY) {
+		zend_hash_destroy(Z_ARRVAL_P(zv));
+		pefree(Z_ARRVAL_P(zv), GC_FLAGS(Z_ARRVAL_P(zv)) & IS_ARRAY_PERSISTENT);
+	} else if (Z_TYPE_P(zv) == IS_STRING) {
+		zend_string_release(Z_STR_P(zv));
+	} else {
+		if (Z_REFCOUNTED_P(zv)) {
+			zval_ptr_dtor(zv);
+		}
+	}
+}
 #endif

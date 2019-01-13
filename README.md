@@ -10,7 +10,7 @@ A sandbox is an isolated environment (a thread in our case); Things may go very 
 In practice this means entry point closures must not:
 
   * accept or return by reference
-  * accept or return non-scalar values (array, object)
+  * accept or return objects
   * execute a limited set of instructions
 
 Instructions prohibited directly in the sandbox are:
@@ -47,7 +47,7 @@ class sandbox\Runtime {
 	/**
 	* Shall enter into the thread at the given entry point
 	* @param entry point for sandbox
-	* @param array argv for closure
+	* @param argv for closure
 	* @throws \sandbox\Exception if $closure or $argv are not valid
 	* @throws \sandbox\Exception if $closure bails
 	**/
