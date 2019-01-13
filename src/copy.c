@@ -76,7 +76,9 @@ HashTable *php_sandbox_copy_hash(HashTable *source, zend_bool persistent) {
 
 #if PHP_VERSION_ID < 70300
 	GC_TYPE_INFO(ht) = IS_ARRAY;
-	ht->u.flags |= HASH_FLAG_APPLY_PROTECTION | HASH_FLAG_PERSISTENT;
+	ht->u.flags = persistent ? 
+		HASH_FLAG_APPLY_PROTECTION | HASH_FLAG_PERSISTENT :
+		HASH_FLAG_APPLY_PROTECTION;
 #else
 	GC_TYPE_INFO(ht) = persistent ? IS_ARRAY|IS_ARRAY_PERSISTENT : IS_ARRAY;
 #endif
