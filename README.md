@@ -111,4 +111,4 @@ Stack trace:
 
 The reason for this behaviour is that the extension registry is a truly global symbol, and so the parent context does detect that the extension is loaded, but it is not able to detect that it was never started in the this context and so did not register any classes.
 
-The same is true when the sandboxed code executes ```dl```, which may be disabled with confgiuration in the normal way.
+The ```dl``` function may be disabled by configuration in the normal way.
