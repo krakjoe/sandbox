@@ -119,7 +119,6 @@ PHP_METHOD(Sandbox, enter)
 		php_sandbox_exception(
 			"sandbox bailed out");
 		php_sandbox_monitor_unset(sandbox->monitor, PHP_SANDBOX_ERROR);
-		php_sandbox_zval_dtor(&sandbox->entry.argv);
 		return;
 	}
 
