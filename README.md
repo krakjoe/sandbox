@@ -69,8 +69,11 @@ The following options may be an array, or comma separated list:
 
   * disable_functions
   * disable_classes
-  * extension 
   * zend_extension
+
+The following options will be ignored:
+
+  * extension - use dl()
 
 All other options are passed directly to zend verbatim and set as if set by system configuration file.
 
@@ -81,13 +84,11 @@ Extensions
 It's possible to load extensions in the sandbox that are not available in the parent runtime, however this comes with a (benign, mostly) quirk.
 
 ```php
-$sandbox = new \sandbox\Runtime([
-	"extension" => [
-		"componere"
-	]
-]);
+$sandbox = new \sandbox\Runtime();
 
 $sandbox->enter(function(){
+	dl("componere");
+
 	var_dump(new \Componere\Definition("mine"));
 });
 

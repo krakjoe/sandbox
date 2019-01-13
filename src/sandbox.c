@@ -310,10 +310,6 @@ static zend_always_inline void php_sandbox_configure_callback(int (*zend_callbac
 	}
 }
 
-static zend_always_inline int php_sandbox_load_module(char *name, size_t length) {
-	return php_load_extension(name, MODULE_TEMPORARY, 1);
-}
-
 static zend_always_inline int php_sandbox_load_extension(char *name, size_t length) {
 	return zend_load_extension(name);
 }
@@ -331,7 +327,7 @@ static zend_always_inline void php_sandbox_configure(zval *configuration) {
 		} else if (zend_string_equals_literal_ci(local, "disable_classes")) {
 			php_sandbox_configure_callback(zend_disable_class, value);
 		} else if (zend_string_equals_literal_ci(local, "extension")) {
-			php_sandbox_configure_callback(php_sandbox_load_module, value);
+			/* nothing, use dl */
 		} else if (zend_string_equals_literal_ci(local, "zend_extension")) {
 			php_sandbox_configure_callback(php_sandbox_load_extension, value);
 		} else {
