@@ -69,11 +69,11 @@ The following options may be an array, or comma separated list:
 
   * disable_functions
   * disable_classes
-  * zend_extension
 
 The following options will be ignored:
 
   * extension - use dl()
+  * zend_extension - unsupported
 
 All other options are passed directly to zend verbatim and set as if set by system configuration file.
 

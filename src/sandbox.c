@@ -310,10 +310,6 @@ static zend_always_inline void php_sandbox_configure_callback(int (*zend_callbac
 	}
 }
 
-static zend_always_inline int php_sandbox_load_extension(char *name, size_t length) {
-	return zend_load_extension(name);
-}
-
 static zend_always_inline void php_sandbox_configure(zval *configuration) {
 	zend_string *name;
 	zval        *value;
@@ -326,10 +322,9 @@ static zend_always_inline void php_sandbox_configure(zval *configuration) {
 			php_sandbox_configure_callback(zend_disable_function, value);
 		} else if (zend_string_equals_literal_ci(local, "disable_classes")) {
 			php_sandbox_configure_callback(zend_disable_class, value);
-		} else if (zend_string_equals_literal_ci(local, "extension")) {
-			/* nothing, use dl */
-		} else if (zend_string_equals_literal_ci(local, "zend_extension")) {
-			php_sandbox_configure_callback(php_sandbox_load_extension, value);
+		} else if (zend_string_equals_literal_ci(local, "extension") ||
+			   zend_string_equals_literal_ci(local, "zend_extension")) {
+			/* nothing, use dl for modules and don't load zend_extensions */
 		} else {
 			switch (Z_TYPE_P(value)) {
 				case IS_STRING:
