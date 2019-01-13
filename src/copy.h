@@ -25,7 +25,11 @@ zend_bool php_sandbox_copy_check(php_sandbox_t *sandbox, zend_execute_data *exec
 static zend_always_inline void php_sandbox_zval_dtor(zval *zv) {
 	if (Z_TYPE_P(zv) == IS_ARRAY) {
 		zend_hash_destroy(Z_ARRVAL_P(zv));
+#if PHP_VERSION_ID < 70300
+		pefree(Z_ARRVAL_P(zv), Z_ARRVAL_P(zv)->u.flags & HASH_FLAG_PERSISTENT);
+#else
 		pefree(Z_ARRVAL_P(zv), GC_FLAGS(Z_ARRVAL_P(zv)) & IS_ARRAY_PERSISTENT);
+#endif
 	} else if (Z_TYPE_P(zv) == IS_STRING) {
 		zend_string_release(Z_STR_P(zv));
 	} else {
