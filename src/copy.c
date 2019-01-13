@@ -321,16 +321,6 @@ zend_bool php_sandbox_copy_arginfo_check(zend_function *function) { /* {{{ */
 			return 0;
 		}
 
-#if PHP_VERSION_ID >= 70200
-		if (ZEND_TYPE_IS_SET(it->type) && ZEND_TYPE_CODE(it->type) == IS_ARRAY) {
-#else
-		if (it->type_hint == IS_ARRAY) {
-#endif
-			zend_throw_error(NULL,
-				"cannot return an array directly from the sandbox");
-			return 0;
-		}
-
 		if (it->pass_by_reference) {
 			zend_throw_error(NULL,
 				"cannot return by reference directly from the sandbox");
@@ -353,16 +343,6 @@ zend_bool php_sandbox_copy_arginfo_check(zend_function *function) { /* {{{ */
 #endif
 			zend_throw_error(NULL,
 				"cannot pass an object directly to the sandbox at argument %d", argc);
-			return 0;
-		}
-
-#if PHP_VERSION_ID >= 70200
-		if (ZEND_TYPE_IS_SET(it->type) && ZEND_TYPE_CODE(it->type) == IS_ARRAY) {
-#else
-		if (it->type_hint == IS_ARRAY) {
-#endif
-			zend_throw_error(NULL,
-				"cannot pass an array directly to the sandbox at argument %d", argc);
 			return 0;
 		}
 
