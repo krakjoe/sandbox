@@ -387,11 +387,6 @@ static zend_always_inline zend_bool php_sandbox_copy_argv_check(zval *args) { /*
 			return 0;
 		}
 
-		if (Z_TYPE_P(arg) == IS_ARRAY) {
-			zend_throw_error(NULL, 
-				"cannot pass an array directly to the sandbox at argument %d", argc);
-			return 0;
-		}
 		argc++;	
 	} ZEND_HASH_FOREACH_END();
 
@@ -459,7 +454,7 @@ zend_bool php_sandbox_copy_check(php_sandbox_t *sandbox, zend_execute_data *exec
 	sandbox->entry.point = function;
 
 	if (argc) {
-		ZVAL_COPY_VALUE(&sandbox->entry.argv, argv);
+		php_sandbox_copy_zval(&sandbox->entry.argv, argv, 1);
 	} else  ZVAL_UNDEF(&sandbox->entry.argv);
 
 	return 1;

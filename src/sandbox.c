@@ -129,6 +129,8 @@ PHP_METHOD(Sandbox, enter)
 			php_sandbox_zval_dtor(&sandbox->entry.retval);
 		}
 	}
+
+	php_sandbox_zval_dtor(&sandbox->entry.argv);
 }
 
 PHP_METHOD(Sandbox, close)
