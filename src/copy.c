@@ -67,11 +67,10 @@ void php_sandbox_copy_zval(zval *dest, zval *source, zend_bool persistent) {
 }
 
 HashTable *php_sandbox_copy_hash(HashTable *source, zend_bool persistent) {
-	HashTable *ht = (HashTable*) pemalloc(sizeof(HashTable), persistent);
 	uint32_t idx;
+	HashTable *ht = (HashTable*) php_sandbox_copy_mem(
+					source, sizeof(HashTable), persistent);
 
-	memcpy(ht, source, sizeof(HashTable));
-	
 	GC_SET_REFCOUNT(ht, 1);
 
 #if PHP_VERSION_ID < 70300
