@@ -73,12 +73,15 @@ HashTable *php_sandbox_copy_hash(HashTable *source, zend_bool persistent) {
 	memcpy(ht, source, sizeof(HashTable));
 	
 	GC_SET_REFCOUNT(ht, 1);
+
+#if PHP_VERSION_ID < 70300
+	GC_TYPE_INFO(ht) = IS_ARRAY;
+	ht->u.flags |= HASH_FLAG_APPLY_PROTECTION | HASH_FLAG_PERSISTENT;
+#else
 	GC_TYPE_INFO(ht) = persistent ? IS_ARRAY|IS_ARRAY_PERSISTENT : IS_ARRAY;
+#endif
 
 	ht->pDestructor = php_sandbox_zval_dtor;
-#if PHP_VERSION_ID < 70300
-	ht->u.flags |= HASH_FLAG_APPLY_PROTECTION;
-#endif
 
 	ht->u.flags |= HASH_FLAG_STATIC_KEYS;
 	if (ht->nNumUsed == 0) {
