@@ -277,6 +277,36 @@ static void php_sandbox_execute(php_sandbox_monitor_t *monitor, zend_function *f
 	efree(fcc.function_handler);
 }
 
+static zend_always_inline void php_sandbox_configure_callback(int (*zend_callback) (char *, size_t), zval *value) {
+	if (Z_TYPE_P(value) == IS_ARRAY) {
+		zval *val;
+		ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(value), val) {
+			if (Z_TYPE_P(val) == IS_STRING) {
+				zend_callback(Z_STRVAL_P(val), Z_STRLEN_P(val));
+			}
+		} ZEND_HASH_FOREACH_END();
+	} else if (Z_TYPE_P(value) == IS_STRING) {
+		char *start  = Z_STRVAL_P(value),
+		     *end    = Z_STRVAL_P(value) + Z_STRLEN_P(value),
+		     *next   = (char *) php_memnstr(Z_STRVAL_P(value), ZEND_STRL(","), end);
+
+		if (next == NULL) {
+			zend_callback(Z_STRVAL_P(value), Z_STRLEN_P(value));
+			return;
+		}
+
+		do {
+			zend_callback(start, next - start);
+			start = next + 1;
+			next  = (char *) php_memnstr(start, ZEND_STRL(","), end);
+		} while(next);
+
+		if (start <= end) {
+			zend_callback(start, end - start);
+		}
+	}
+}
+
 static zend_always_inline void php_sandbox_configure(zval *configuration) {
 	zend_string *name;
 	zval        *value;
@@ -285,17 +315,28 @@ static zend_always_inline void php_sandbox_configure(zval *configuration) {
 		zend_string *chars;
 		zend_string *local = zend_string_dup(name, 1);
 
-		if (Z_TYPE_P(value) == IS_STRING) {
-			chars = Z_STR_P(value);
+		if (zend_string_equals_literal_ci(local, "disable_functions")) {
+			php_sandbox_configure_callback(zend_disable_function, value);
+		} else if (zend_string_equals_literal_ci(local, "disable_classes")) {
+			php_sandbox_configure_callback(zend_disable_class, value);
 		} else {
-			chars = zval_get_string(value);
-		}
+			switch (Z_TYPE_P(value)) {
+				case IS_STRING:
+				case IS_TRUE:
+				case IS_FALSE:
+				case IS_LONG:
+				case IS_DOUBLE:
+					chars = zval_get_string(value);
+				break;
 
-		zend_alter_ini_entry_chars(local, 
-			ZSTR_VAL(chars), ZSTR_LEN(chars), 
-			ZEND_INI_SYSTEM, ZEND_INI_STAGE_ACTIVATE);
+				default:
+					continue;
+			}
 
-		if (Z_TYPE_P(value) != IS_STRING) {
+			zend_alter_ini_entry_chars(local, 
+				ZSTR_VAL(chars), ZSTR_LEN(chars), 
+				ZEND_INI_SYSTEM, ZEND_INI_STAGE_ACTIVATE);
+
 			zend_string_release(chars);
 		}
 
@@ -332,6 +373,7 @@ void* php_sandbox_routine(void *arg) {
 	SG(sapi_started)            = 0;
 	SG(headers_sent)            = 1;
 	SG(request_info).no_headers = 1;
+	PG(during_request_startup)  = 0;
 
 	ZVAL_UNDEF(&sandbox->entry.retval);
 
