@@ -35,7 +35,6 @@ API
 ===
 
 ```php
-<?php
 final class sandbox\Runtime {
 	/**
 	* Shall construct a new sandbox thread
@@ -61,7 +60,54 @@ final class sandbox\Runtime {
 }
 ```
 
-Features
-========
+Configuring the Sandbox
+=======================
 
-Pull requests are welcome, and if issues appear, I'll try to fix them ...
+The configuration array passed to the constructor will be configure the sandbox using INI.
+
+The following options may be an array, or comma separated list:
+
+  * disable_functions
+  * disable_classes
+  * extension 
+  * zend_extension
+
+All other options are passed directly to zend verbatim and set as if set by system configuration file.
+
+Extensions
+==========
+*PHP isn't really share nothing, it's share as little as possible to get the job done!*
+
+It's possible to load extensions in the sandbox that are not available in the parent runtime, however this comes with a (benign, mostly) quirk.
+
+```php
+$sandbox = new \sandbox\Runtime([
+	"extension" => [
+		"componere"
+	]
+]);
+
+$sandbox->enter(function(){
+	var_dump(new \Componere\Definition("mine"));
+});
+
+if (extension_loaded("componere")){
+	var_dump(new \Componere\Definition("mine")); # line 13
+}
+```
+
+The code above will output something like:
+
+```
+object(Componere\Definition)#1 (0) {
+}
+
+Fatal error: Uncaught Error: Class 'Componere\Definition' not found in %s:13
+Stack trace:
+#0 {main}
+  thrown in %s on line 13
+```
+
+The reason for this behaviour is that the extension registry is a truly global symbol, and so the parent context does detect that the extension is loaded, but it is not able to detect that it was never started in the this context and so did not register any classes.
+
+The same is true when the sandboxed code executes ```dl```, which may be disabled with confgiuration in the normal way.

@@ -27,6 +27,9 @@
 
 #include "zend_closures.h"
 #include "zend_exceptions.h"
+#include "zend_extensions.h"
+
+#include "ext/standard/dl.h"
 
 #define php_sandbox_exception(m, ...) zend_throw_exception_ex(php_sandbox_exception_ce, 0, m, ##__VA_ARGS__)
 
@@ -307,6 +310,14 @@ static zend_always_inline void php_sandbox_configure_callback(int (*zend_callbac
 	}
 }
 
+static zend_always_inline int php_sandbox_load_module(char *name, size_t length) {
+	return php_load_extension(name, MODULE_TEMPORARY, 1);
+}
+
+static zend_always_inline int php_sandbox_load_extension(char *name, size_t length) {
+	return zend_load_extension(name);
+}
+
 static zend_always_inline void php_sandbox_configure(zval *configuration) {
 	zend_string *name;
 	zval        *value;
@@ -319,6 +330,10 @@ static zend_always_inline void php_sandbox_configure(zval *configuration) {
 			php_sandbox_configure_callback(zend_disable_function, value);
 		} else if (zend_string_equals_literal_ci(local, "disable_classes")) {
 			php_sandbox_configure_callback(zend_disable_class, value);
+		} else if (zend_string_equals_literal_ci(local, "extension")) {
+			php_sandbox_configure_callback(php_sandbox_load_module, value);
+		} else if (zend_string_equals_literal_ci(local, "zend_extension")) {
+			php_sandbox_configure_callback(php_sandbox_load_extension, value);
 		} else {
 			switch (Z_TYPE_P(value)) {
 				case IS_STRING:
@@ -362,18 +377,18 @@ void* php_sandbox_routine(void *arg) {
 	PG(expose_php)       = 0;
 	PG(auto_globals_jit) = 0;
 
+	php_request_startup();
+
+	PG(during_request_startup)  = 0;
+	SG(sapi_started)            = 0;
+	SG(headers_sent)            = 1;
+	SG(request_info).no_headers = 1;
+
 	if (!Z_ISUNDEF(sandbox->configuration)) {
 		php_sandbox_configure(&sandbox->configuration);
 	}
 
 	php_sandbox_monitor_set(sandbox->monitor, PHP_SANDBOX_READY);
-
-	php_request_startup();
-
-	SG(sapi_started)            = 0;
-	SG(headers_sent)            = 1;
-	SG(request_info).no_headers = 1;
-	PG(during_request_startup)  = 0;
 
 	ZVAL_UNDEF(&sandbox->entry.retval);
 
