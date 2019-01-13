@@ -63,7 +63,7 @@ final class sandbox\Runtime {
 Configuring the Sandbox
 =======================
 
-The configuration array passed to the constructor will be configure the sandbox using INI.
+The configuration array passed to the constructor will configure the sandbox using INI.
 
 The following options may be an array, or comma separated list:
 
