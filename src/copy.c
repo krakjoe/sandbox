@@ -357,7 +357,7 @@ zend_bool php_sandbox_copy_arginfo_check(zend_function *function) { /* {{{ */
 	return 1;
 } /* }}} */
 
-static zend_always_inline zend_bool php_sandbox_copy_argv_check(zval *args, int *argc, zval *error) { /* {{{ */
+static zend_bool php_sandbox_copy_argv_check(zval *args, int *argc, zval *error) { /* {{{ */
 	zval *arg;
 
 	if (*argc == 0) {
