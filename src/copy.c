@@ -347,7 +347,7 @@ zend_bool php_sandbox_copy_arginfo_check(zend_function *function) { /* {{{ */
 
 		if (it->pass_by_reference) {
 			zend_throw_error(NULL,
-				"illegal variable (object) accepted by to sandbox at argument %d", argc);
+				"illegal variable (reference) accepted by to sandbox at argument %d", argc);
 			return 0;
 		}
 		it++;

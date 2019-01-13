@@ -63,10 +63,7 @@ string(55) "illegal type (object) accepted by sandbox at argument 1"
 string(55) "illegal type (object) accepted by sandbox at argument 2"
 string(55) "illegal type (object) accepted by sandbox at argument 3"
 string(41) "illegal type (object) returned by sandbox"
-string(62) "illegal variable (object) accepted by to sandbox at argument 1"
-string(62) "illegal variable (object) accepted by to sandbox at argument 2"
-string(62) "illegal variable (object) accepted by to sandbox at argument 3"
+string(65) "illegal variable (reference) accepted by to sandbox at argument 1"
+string(65) "illegal variable (reference) accepted by to sandbox at argument 2"
+string(65) "illegal variable (reference) accepted by to sandbox at argument 3"
 string(48) "illegal variable (reference) returned by sandbox"
-
-
-
