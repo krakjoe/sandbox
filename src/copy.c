@@ -316,13 +316,13 @@ zend_bool php_sandbox_copy_arginfo_check(zend_function *function) { /* {{{ */
 		if (it->type_hint == IS_OBJECT || it->class_name) {
 #endif
 			zend_throw_error(NULL,
-				"cannot return an object directly from the sandbox");
+				"illegal type (object) returned by sandbox");
 			return 0;
 		}
 
 		if (it->pass_by_reference) {
 			zend_throw_error(NULL,
-				"cannot return by reference directly from the sandbox");
+				"illegal variable (reference) returned by sandbox");
 			return 0;
 		}
 	}
@@ -341,13 +341,13 @@ zend_bool php_sandbox_copy_arginfo_check(zend_function *function) { /* {{{ */
 		if (it->type_hint == IS_OBJECT || it->class_name) {
 #endif
 			zend_throw_error(NULL,
-				"cannot pass an object directly to the sandbox at argument %d", argc);
+				"illegal type (object) accepted by sandbox at argument %d", argc);
 			return 0;
 		}
 
 		if (it->pass_by_reference) {
 			zend_throw_error(NULL,
-				"cannot pass by reference directly to the sandbox at argument %d", argc);
+				"illegal variable (object) accepted by to sandbox at argument %d", argc);
 			return 0;
 		}
 		it++;
@@ -357,18 +357,31 @@ zend_bool php_sandbox_copy_arginfo_check(zend_function *function) { /* {{{ */
 	return 1;
 } /* }}} */
 
-static zend_always_inline zend_bool php_sandbox_copy_argv_check(zval *args) { /* {{{ */
+static zend_always_inline zend_bool php_sandbox_copy_argv_check(zval *args, int *argc, zval *error) { /* {{{ */
 	zval *arg;
-	int   argc = 1;
+
+	if (*argc == 0) {
+		*argc = 1;
+	}
 
 	ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(args), arg) {
 		if (Z_TYPE_P(arg) == IS_OBJECT) {
-			zend_throw_error(NULL, 
-				"cannot pass an object directly to the sandbox at argument %d", argc);
+			ZVAL_COPY_VALUE(error, arg);
 			return 0;
 		}
 
-		argc++;	
+		if (Z_TYPE_P(arg) == IS_ARRAY) {
+			if (!php_sandbox_copy_argv_check(arg, argc, error)) {
+				return 0;
+			}
+		}
+
+		if (Z_TYPE_P(arg) == IS_RESOURCE) {
+			ZVAL_COPY_VALUE(error, arg);
+			return 0;
+		}
+
+		(*argc)++;
 	} ZEND_HASH_FOREACH_END();
 
 	return 1;
@@ -377,12 +390,17 @@ static zend_always_inline zend_bool php_sandbox_copy_argv_check(zval *args) { /*
 zend_bool php_sandbox_copy_check(php_sandbox_t *sandbox, zend_execute_data *execute_data, zend_function * function, int argc, zval *argv) { /* {{{ */
 	zend_op *it = function->op_array.opcodes,
 		*end = it + function->op_array.last;
+	uint32_t errat = 0;
+	zval errarg;
 
 	if (!php_sandbox_copy_arginfo_check(function)) {
 		return 0;
 	}
 
-	if (argc && !php_sandbox_copy_argv_check(argv)) {
+	if (argc && !php_sandbox_copy_argv_check(argv, &errat, &errarg)) {
+		zend_throw_error(NULL, 
+			"illegal variable (%s) passed to sandbox at argument %d", 
+			zend_get_type_by_const(Z_TYPE(errarg)), errat);
 		return 0;
 	}
 
@@ -391,40 +409,40 @@ zend_bool php_sandbox_copy_check(php_sandbox_t *sandbox, zend_execute_data *exec
 			case ZEND_YIELD:
 			case ZEND_YIELD_FROM:
 				zend_throw_error(NULL,
-					"cannot yield directly from the sandbox on line %d",
-					it->lineno);
+					"illegal instruction (yield) on line %d of entry point",
+					it->lineno - function->op_array.line_start);
 				return 0;
 				
 			case ZEND_DECLARE_ANON_CLASS:
 				zend_throw_error(NULL,
-					"cannot declare anonymous class directly in the sandbox on line %d",
-					it->lineno);
+					"illegal instruction (new class) on line %d of entry point",
+					it->lineno - function->op_array.line_start);
 				return 0;
 
 			case ZEND_DECLARE_LAMBDA_FUNCTION:
 				zend_throw_error(NULL,
-					"cannot declare anonymous function directly in the sandbox on line %d",
-					it->lineno);
+					"illegal instruction (function) on line %d of entry point",
+					it->lineno - function->op_array.line_start);
 				return 0;
 
 			case ZEND_DECLARE_FUNCTION:
 				zend_throw_error(NULL,
-					"cannot declare function directly in the sandbox on line %d",
-					it->lineno);
+					"illegal instruction (function) on line %d of entry point",
+					it->lineno - function->op_array.line_start);
 				return 0;
 
 			case ZEND_DECLARE_CLASS:
 			case ZEND_DECLARE_INHERITED_CLASS:
 			case ZEND_DECLARE_INHERITED_CLASS_DELAYED:
 				zend_throw_error(NULL,
-					"cannot declare class directly in the sandbox on line %d", 
-					it->lineno);
+					"illegal instruction (class) on line %d of entry point", 
+					it->lineno - function->op_array.line_start);
 				return 0;
 
 			case ZEND_BIND_STATIC:	
 				if (php_sandbox_copying_lexical(execute_data, function, it)) {
 					zend_throw_error(NULL,
-						"cannot bind lexical vars in the sandbox");
+						"illegal instruction (lexical) in entry point");
 					return 0;
 				}
 			break;

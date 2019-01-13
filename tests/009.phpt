@@ -17,7 +17,8 @@ try {
 	var_dump($t->getMessage());
 }
 ?>
---EXPECTF--
-string(%d) "cannot declare anonymous class directly in the sandbox on line %d"
+--EXPECT--
+string(56) "illegal instruction (new class) on line 1 of entry point"
+
 
 

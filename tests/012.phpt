@@ -17,6 +17,7 @@ try {
 	var_dump($ex->getMessage());
 }
 ?>
---EXPECTF--
-string(%d) "cannot bind lexical vars in the sandbox"
+--EXPECT--
+string(44) "illegal instruction (lexical) in entry point"
+
 

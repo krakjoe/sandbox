@@ -20,5 +20,5 @@ try {
 }
 ?>
 --EXPECTF--
-string(%d) "cannot yield directly from the sandbox on line %d"
+string(52) "illegal instruction (yield) on line 1 of entry point"
 

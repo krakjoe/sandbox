@@ -27,17 +27,35 @@ try {
 }
 
 try {
-	$sandbox->enter(function($arg, $arg2, stdClass ... $arg3) {}, [
-		1, new stdClass
+	$sandbox->enter(function($arg, $arg2, ... $arg3) {}, [
+		1, 2, new stdClass
+	]);
+} catch (Error $ex) {
+	var_dump($ex->getMessage());
+}
+
+try {
+	$sandbox->enter(function($array) {}, [
+		[new stdClass]
+	]);
+} catch (Error $ex) {
+	var_dump($ex->getMessage());
+}
+
+try {
+	$sandbox->enter(function($array) {}, [
+		[STDIN]
 	]);
 } catch (Error $ex) {
 	var_dump($ex->getMessage());
 }
 ?>
 --EXPECT--
-string(59) "cannot pass an object directly to the sandbox at argument 1"
-string(59) "cannot pass an object directly to the sandbox at argument 2"
-string(59) "cannot pass an object directly to the sandbox at argument 3"
+string(57) "illegal variable (object) passed to sandbox at argument 1"
+string(57) "illegal variable (object) passed to sandbox at argument 2"
+string(57) "illegal variable (object) passed to sandbox at argument 3"
+string(57) "illegal variable (object) passed to sandbox at argument 1"
+string(59) "illegal variable (resource) passed to sandbox at argument 1"
 
 
 

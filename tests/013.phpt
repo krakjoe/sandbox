@@ -19,6 +19,6 @@ try {
 }
 ?>
 --EXPECTF--
-string(%d) "cannot declare anonymous function directly in the sandbox on line %d"
+string(55) "illegal instruction (function) on line 1 of entry point"
 
 

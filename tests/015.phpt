@@ -19,6 +19,7 @@ try {
 	var_dump($ex->getMessage());
 }
 ?>
---EXPECTF--
-string(%d) "cannot yield directly from the sandbox on line %d"
+--EXPECT--
+string(52) "illegal instruction (yield) on line 1 of entry point"
+
 
