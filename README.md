@@ -18,6 +18,7 @@ Instructions prohibited directly in the sandbox are:
   * declare (anonymous) function
   * declare (anonymous) class
   * lexical scope access
+  * yield
 
 No instructions are prohibited in the files which the sandbox may include, but allowing these instructions directly in the code which the sandbox executes at entry would break the isolation of the sandbox such that we couldn't be sure the system would remain stable.
 
