@@ -36,7 +36,7 @@ API
 
 ```php
 <?php
-class sandbox\Runtime {
+final class sandbox\Runtime {
 	/**
 	* Shall construct a new sandbox thread
         * @param array optional ini configuration

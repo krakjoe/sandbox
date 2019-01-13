@@ -217,6 +217,7 @@ void php_sandbox_startup(void) {
 
 	php_sandbox_ce = zend_register_internal_class(&ce);
 	php_sandbox_ce->create_object = php_sandbox_create;
+	php_sandbox_ce->ce_flags |= ZEND_ACC_FINAL;
 
 	INIT_NS_CLASS_ENTRY(ce, "sandbox", "Exception", NULL);
 
