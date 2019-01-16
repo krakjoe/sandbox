@@ -48,7 +48,7 @@ created it.</description>
   <email>remi@php.net</email>
   <active>yes</active>
  </lead>
- <date>2019-01-01</date>
+ <date>2019-01-16</date>
  <version>
   <release>0.1.1</release>
   <api>0.1.1</api>
@@ -101,6 +101,11 @@ created it.</description>
     <file name="020.phpt" role="test" />
     <file name="021.phpt" role="test" />
     <file name="022.phpt" role="test" />
+    <file name="023.phpt" role="test" />
+    <file name="024.phpt" role="test" />
+    <file name="025.phpt" role="test" />
+    <file name="026.phpt" role="test" />
+    <file name="027.phpt" role="test" />
    </dir> <!-- tests -->
   </dir>
  </contents>
