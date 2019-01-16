@@ -19,6 +19,7 @@ try {
 	var_dump($ex->getMessage());
 }
 ?>
---EXPECTF--
-string(%d) "cannot declare function directly in the sandbox on line %d"
+--EXPECT--
+string(55) "illegal instruction (function) on line 1 of entry point"
+
 

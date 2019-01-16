@@ -1,3 +1,4 @@
+
 ARG_WITH('sandbox', 'sandbox support', 'no');
 
 if (PHP_SANDBOX != 'no') {
@@ -15,7 +16,8 @@ if (PHP_SANDBOX != 'no') {
 			ADD_SOURCES(
 				configure_module_dirname + "/src",
 				"copy.c monitor.c sandbox.c", 
-				"sandbox"
+				"sandbox",
+				"src"
 			);
 		} else {
 			WARNING("sandbox not enabled; pthread libraries and headers not found");

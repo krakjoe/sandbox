@@ -25,6 +25,98 @@
 
 #include <Zend/zend_vm.h>
 
+#ifndef GC_SET_REFCOUNT
+# define GC_SET_REFCOUNT(ref, rc) (GC_REFCOUNT(ref) = (rc))
+#endif
+
+extern zend_string* php_sandbox_main;
+
+static const uint32_t uninitialized_bucket[-HT_MIN_MASK] = {HT_INVALID_IDX, HT_INVALID_IDX};
+
+static zend_always_inline void* php_sandbox_copy_mem(void *source, size_t size, zend_bool persistent) {
+	void *destination = (void*) pemalloc(size, persistent);
+
+	memcpy(destination, source, size);
+
+	return destination;
+}
+
+HashTable *php_sandbox_copy_hash(HashTable *source, zend_bool persistent);
+
+void php_sandbox_copy_zval(zval *dest, zval *source, zend_bool persistent) {
+	switch (Z_TYPE_P(source)) {
+		case IS_NULL:
+		case IS_TRUE:
+		case IS_FALSE:
+		case IS_LONG:
+		case IS_DOUBLE:
+			ZVAL_DUP(dest, source);
+		break;
+
+		case IS_STRING:
+			ZVAL_STR(dest, zend_string_init(Z_STRVAL_P(source), Z_STRLEN_P(source), persistent));
+		break;
+
+		case IS_ARRAY:
+			ZVAL_ARR(dest, php_sandbox_copy_hash(Z_ARRVAL_P(source), persistent));
+		break;
+
+		default:
+			ZVAL_BOOL(dest, zend_is_true(source));
+	}
+}
+
+HashTable *php_sandbox_copy_hash(HashTable *source, zend_bool persistent) {
+	uint32_t idx;
+	HashTable *ht = (HashTable*) php_sandbox_copy_mem(
+					source, sizeof(HashTable), persistent);
+
+	GC_SET_REFCOUNT(ht, 1);
+
+#if PHP_VERSION_ID < 70300
+	GC_TYPE_INFO(ht) = IS_ARRAY;
+	ht->u.flags = persistent ? 
+		HASH_FLAG_APPLY_PROTECTION | HASH_FLAG_PERSISTENT :
+		HASH_FLAG_APPLY_PROTECTION;
+#else
+	GC_TYPE_INFO(ht) = persistent ? IS_ARRAY|IS_ARRAY_PERSISTENT : IS_ARRAY;
+#endif
+
+	ht->pDestructor = php_sandbox_zval_dtor;
+
+	ht->u.flags |= HASH_FLAG_STATIC_KEYS;
+	if (ht->nNumUsed == 0) {
+		ht->u.flags &= ~(HASH_FLAG_INITIALIZED|HASH_FLAG_PACKED);
+		ht->nNextFreeElement = 0;
+		ht->nTableMask = HT_MIN_MASK;
+		HT_SET_DATA_ADDR(ht, &uninitialized_bucket);
+		return ht;
+	}
+
+	ht->nNextFreeElement = 0;
+	ht->nInternalPointer = HT_INVALID_IDX;
+	HT_SET_DATA_ADDR(ht, php_sandbox_copy_mem(HT_GET_DATA_ADDR(ht), HT_USED_SIZE(ht), persistent));
+	for (idx = 0; idx < ht->nNumUsed; idx++) {
+		Bucket *p = ht->arData + idx;
+		if (Z_TYPE(p->val) == IS_UNDEF) continue;
+
+		if (ht->nInternalPointer == HT_INVALID_IDX) {
+			ht->nInternalPointer = idx;
+		}
+
+		if (p->key) {
+			p->key = zend_string_init(ZSTR_VAL(p->key), ZSTR_LEN(p->key), persistent);
+			ht->u.flags &= ~HASH_FLAG_STATIC_KEYS;
+		} else if ((zend_long) p->h >= (zend_long) ht->nNextFreeElement) {
+			ht->nNextFreeElement = p->h + 1;
+		}
+
+		php_sandbox_copy_zval(&p->val, &p->val, persistent);
+	}
+
+	return ht;
+}
+
 /* {{{ */
 static inline HashTable* php_sandbox_copy_statics(HashTable *old) {
 	return zend_array_dup(old);
@@ -224,23 +316,13 @@ zend_bool php_sandbox_copy_arginfo_check(zend_function *function) { /* {{{ */
 		if (it->type_hint == IS_OBJECT || it->class_name) {
 #endif
 			zend_throw_error(NULL,
-				"cannot return an object directly from the sandbox");
-			return 0;
-		}
-
-#if PHP_VERSION_ID >= 70200
-		if (ZEND_TYPE_IS_SET(it->type) && ZEND_TYPE_CODE(it->type) == IS_ARRAY) {
-#else
-		if (it->type_hint == IS_ARRAY) {
-#endif
-			zend_throw_error(NULL,
-				"cannot return an array directly from the sandbox");
+				"illegal type (object) returned by sandbox");
 			return 0;
 		}
 
 		if (it->pass_by_reference) {
 			zend_throw_error(NULL,
-				"cannot return by reference directly from the sandbox");
+				"illegal variable (reference) returned by sandbox");
 			return 0;
 		}
 	}
@@ -259,23 +341,13 @@ zend_bool php_sandbox_copy_arginfo_check(zend_function *function) { /* {{{ */
 		if (it->type_hint == IS_OBJECT || it->class_name) {
 #endif
 			zend_throw_error(NULL,
-				"cannot pass an object directly to the sandbox at argument %d", argc);
-			return 0;
-		}
-
-#if PHP_VERSION_ID >= 70200
-		if (ZEND_TYPE_IS_SET(it->type) && ZEND_TYPE_CODE(it->type) == IS_ARRAY) {
-#else
-		if (it->type_hint == IS_ARRAY) {
-#endif
-			zend_throw_error(NULL,
-				"cannot pass an array directly to the sandbox at argument %d", argc);
+				"illegal type (object) accepted by sandbox at argument %d", argc);
 			return 0;
 		}
 
 		if (it->pass_by_reference) {
 			zend_throw_error(NULL,
-				"cannot pass by reference directly to the sandbox at argument %d", argc);
+				"illegal variable (reference) accepted by to sandbox at argument %d", argc);
 			return 0;
 		}
 		it++;
@@ -285,23 +357,31 @@ zend_bool php_sandbox_copy_arginfo_check(zend_function *function) { /* {{{ */
 	return 1;
 } /* }}} */
 
-static zend_always_inline zend_bool php_sandbox_copy_argv_check(zval *args) { /* {{{ */
+static zend_bool php_sandbox_copy_argv_check(zval *args, int *argc, zval *error) { /* {{{ */
 	zval *arg;
-	int   argc = 1;
+
+	if (*argc == 0) {
+		*argc = 1;
+	}
 
 	ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(args), arg) {
 		if (Z_TYPE_P(arg) == IS_OBJECT) {
-			zend_throw_error(NULL, 
-				"cannot pass an object directly to the sandbox at argument %d", argc);
+			ZVAL_COPY_VALUE(error, arg);
 			return 0;
 		}
 
 		if (Z_TYPE_P(arg) == IS_ARRAY) {
-			zend_throw_error(NULL, 
-				"cannot pass an array directly to the sandbox at argument %d", argc);
+			if (!php_sandbox_copy_argv_check(arg, argc, error)) {
+				return 0;
+			}
+		}
+
+		if (Z_TYPE_P(arg) == IS_RESOURCE) {
+			ZVAL_COPY_VALUE(error, arg);
 			return 0;
 		}
-		argc++;	
+
+		(*argc)++;
 	} ZEND_HASH_FOREACH_END();
 
 	return 1;
@@ -310,12 +390,17 @@ static zend_always_inline zend_bool php_sandbox_copy_argv_check(zval *args) { /*
 zend_bool php_sandbox_copy_check(php_sandbox_t *sandbox, zend_execute_data *execute_data, zend_function * function, int argc, zval *argv) { /* {{{ */
 	zend_op *it = function->op_array.opcodes,
 		*end = it + function->op_array.last;
+	uint32_t errat = 0;
+	zval errarg;
 
 	if (!php_sandbox_copy_arginfo_check(function)) {
 		return 0;
 	}
 
-	if (argc && !php_sandbox_copy_argv_check(argv)) {
+	if (argc && !php_sandbox_copy_argv_check(argv, &errat, &errarg)) {
+		zend_throw_error(NULL, 
+			"illegal variable (%s) passed to sandbox at argument %d", 
+			zend_get_type_by_const(Z_TYPE(errarg)), errat);
 		return 0;
 	}
 
@@ -324,40 +409,40 @@ zend_bool php_sandbox_copy_check(php_sandbox_t *sandbox, zend_execute_data *exec
 			case ZEND_YIELD:
 			case ZEND_YIELD_FROM:
 				zend_throw_error(NULL,
-					"cannot yield directly from the sandbox on line %d",
-					it->lineno);
+					"illegal instruction (yield) on line %d of entry point",
+					it->lineno - function->op_array.line_start);
 				return 0;
 				
 			case ZEND_DECLARE_ANON_CLASS:
 				zend_throw_error(NULL,
-					"cannot declare anonymous class directly in the sandbox on line %d",
-					it->lineno);
+					"illegal instruction (new class) on line %d of entry point",
+					it->lineno - function->op_array.line_start);
 				return 0;
 
 			case ZEND_DECLARE_LAMBDA_FUNCTION:
 				zend_throw_error(NULL,
-					"cannot declare anonymous function directly in the sandbox on line %d",
-					it->lineno);
+					"illegal instruction (function) on line %d of entry point",
+					it->lineno - function->op_array.line_start);
 				return 0;
 
 			case ZEND_DECLARE_FUNCTION:
 				zend_throw_error(NULL,
-					"cannot declare function directly in the sandbox on line %d",
-					it->lineno);
+					"illegal instruction (function) on line %d of entry point",
+					it->lineno - function->op_array.line_start);
 				return 0;
 
 			case ZEND_DECLARE_CLASS:
 			case ZEND_DECLARE_INHERITED_CLASS:
 			case ZEND_DECLARE_INHERITED_CLASS_DELAYED:
 				zend_throw_error(NULL,
-					"cannot declare class directly in the sandbox on line %d", 
-					it->lineno);
+					"illegal instruction (class) on line %d of entry point", 
+					it->lineno - function->op_array.line_start);
 				return 0;
 
 			case ZEND_BIND_STATIC:	
 				if (php_sandbox_copying_lexical(execute_data, function, it)) {
 					zend_throw_error(NULL,
-						"cannot bind lexical vars in the sandbox");
+						"illegal instruction (lexical) in entry point");
 					return 0;
 				}
 			break;
@@ -368,7 +453,7 @@ zend_bool php_sandbox_copy_check(php_sandbox_t *sandbox, zend_execute_data *exec
 	sandbox->entry.point = function;
 
 	if (argc) {
-		ZVAL_COPY_VALUE(&sandbox->entry.argv, argv);
+		php_sandbox_copy_zval(&sandbox->entry.argv, argv, 1);
 	} else  ZVAL_UNDEF(&sandbox->entry.argv);
 
 	return 1;
@@ -390,7 +475,7 @@ zend_function* php_sandbox_copy(zend_function *function) { /* {{{ */
 	literals = op_array->literals;
 	arg_info = op_array->arg_info;
 
-	op_array->function_name = NULL;
+	op_array->function_name = zend_string_copy(php_sandbox_main);
 	op_array->refcount = (uint32_t*) emalloc(sizeof(uint32_t));
 	(*op_array->refcount) = 1;
 
@@ -403,7 +488,7 @@ zend_function* php_sandbox_copy(zend_function *function) { /* {{{ */
 #if PHP_VERSION_ID >= 70400
 	ZEND_MAP_PTR_NEW(op_array->run_time_cache);
 #else
-	op_array->run_time_cache = (void*) ecalloc(1, op_array->cache_size);
+	op_array->run_time_cache = NULL;
 #endif
 
 	if (op_array->literals) {

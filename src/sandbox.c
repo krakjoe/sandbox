@@ -26,15 +26,31 @@
 #include "TSRM.h"
 
 #include "zend_closures.h"
+#include "zend_exceptions.h"
+#include "zend_extensions.h"
+
+#include "ext/standard/dl.h"
+
+#define php_sandbox_exception(m, ...) zend_throw_exception_ex(php_sandbox_exception_ce, 0, m, ##__VA_ARGS__)
 
 zend_class_entry *php_sandbox_ce;
+zend_class_entry *php_sandbox_exception_ce;
 zend_object_handlers php_sandbox_handlers;
+zend_string *php_sandbox_main;
 
 void* php_sandbox_routine(void *arg);
 
 typedef int (*php_sapi_deactivate_t)(void);
 
 php_sapi_deactivate_t php_sapi_deactivate_function;
+
+ZEND_BEGIN_MODULE_GLOBALS(sandbox)
+	zend_bool sandbox;	
+ZEND_END_MODULE_GLOBALS(sandbox)
+
+ZEND_DECLARE_MODULE_GLOBALS(sandbox);
+
+#define ZG(v) ZEND_TSRMG(sandbox_globals_id, zend_sandbox_globals *, v)
 
 PHP_METHOD(Sandbox, __construct)
 {
@@ -44,7 +60,14 @@ PHP_METHOD(Sandbox, __construct)
 	if (zend_parse_parameters_ex(ZEND_PARSE_PARAMS_QUIET, ZEND_NUM_ARGS(), "|a", &configuration) != SUCCESS) {
 		php_sandbox_monitor_set(sandbox->monitor, PHP_SANDBOX_ERROR);
 
-		zend_throw_error(NULL, "optional configuration array expected");
+		php_sandbox_exception("optional configuration array expected");
+		return;
+	}
+
+	if (ZG(sandbox)) {
+		php_sandbox_monitor_set(sandbox->monitor, PHP_SANDBOX_ERROR);
+
+		php_sandbox_exception("sandboxes cannot create sandboxes");
 		return;
 	}
 
@@ -53,7 +76,7 @@ PHP_METHOD(Sandbox, __construct)
 	}
 
 	if (pthread_create(&sandbox->thread, NULL, php_sandbox_routine, sandbox) != SUCCESS) {
-		zend_throw_error(NULL, "cannot create sandbox thread");
+		php_sandbox_exception("cannot create sandbox thread");
 		return;
 	}
 
@@ -67,18 +90,18 @@ PHP_METHOD(Sandbox, enter)
 	zval *argv = NULL;
 
 	if (zend_parse_parameters_ex(ZEND_PARSE_PARAMS_QUIET, ZEND_NUM_ARGS(), "O|a", &closure, zend_ce_closure, &argv) != SUCCESS) {
-		zend_throw_error(NULL, "Closure, or Closure and args expected");
+		php_sandbox_exception("Closure, or Closure and args expected");
 		return;
 	}
 
 	if (php_sandbox_monitor_lock(sandbox->monitor) != SUCCESS) {
-		zend_throw_error(NULL, "cannot lock sandbox");
+		php_sandbox_exception("cannot lock sandbox");
 		return;
 	}
 
 	if (php_sandbox_monitor_check(sandbox->monitor, PHP_SANDBOX_CLOSE|PHP_SANDBOX_DONE|PHP_SANDBOX_ERROR)) {
 		php_sandbox_monitor_unlock(sandbox->monitor);
-		zend_throw_error(NULL, "sandbox unusable");
+		php_sandbox_exception("sandbox unusable");
 		return;
 	}
 
@@ -93,19 +116,24 @@ PHP_METHOD(Sandbox, enter)
 	php_sandbox_monitor_set(sandbox->monitor, PHP_SANDBOX_EXEC);
 	php_sandbox_monitor_unlock(sandbox->monitor);
 
-	php_sandbox_monitor_wait(sandbox->monitor, PHP_SANDBOX_WAIT);
+	php_sandbox_monitor_wait(sandbox->monitor, PHP_SANDBOX_WAKE);
+
+	if (php_sandbox_monitor_check(sandbox->monitor, PHP_SANDBOX_ERROR)) {
+		php_sandbox_exception(
+			"sandbox bailed out");
+		php_sandbox_monitor_unset(sandbox->monitor, PHP_SANDBOX_ERROR);
+		return;
+	}
 
 	if (!Z_ISUNDEF(sandbox->entry.retval)) {
-		if (Z_TYPE(sandbox->entry.retval) == IS_STRING) {
-			zend_string *rv = zend_string_init(
-						Z_STRVAL(sandbox->entry.retval), 
-						Z_STRLEN(sandbox->entry.retval), 0);
+		php_sandbox_copy_zval(return_value, &sandbox->entry.retval, 0);
 
-			zend_string_release(Z_STR(sandbox->entry.retval));
-
-			RETURN_STR(rv);
-		} else 	ZVAL_COPY(return_value, &sandbox->entry.retval);
+		if (Z_REFCOUNTED(sandbox->entry.retval)) {
+			php_sandbox_zval_dtor(&sandbox->entry.retval);
+		}
 	}
+
+	php_sandbox_zval_dtor(&sandbox->entry.argv);
 }
 
 PHP_METHOD(Sandbox, close)
@@ -114,7 +142,7 @@ PHP_METHOD(Sandbox, close)
 		php_sandbox_from(getThis());
 
 	if (php_sandbox_monitor_check(sandbox->monitor, PHP_SANDBOX_CLOSED|PHP_SANDBOX_ERROR)) {
-		zend_throw_error(NULL, "sandbox unusable");
+		php_sandbox_exception("sandbox unusable");
 		return;
 	}
 
@@ -173,8 +201,14 @@ void php_sandbox_destroy(zend_object *o) {
 	zend_object_std_dtor(o);
 }
 
+static void php_sandbox_globals_memset(zend_sandbox_globals *zg) {
+	memset(zg, 0, sizeof(zend_sandbox_globals));
+}
+
 void php_sandbox_startup(void) {
 	zend_class_entry ce;
+	
+	ZEND_INIT_MODULE_GLOBALS(sandbox, php_sandbox_globals_memset, NULL);
 
 	memcpy(&php_sandbox_handlers, zend_get_std_object_handlers(), sizeof(zend_object_handlers));
 
@@ -185,20 +219,30 @@ void php_sandbox_startup(void) {
 
 	php_sandbox_ce = zend_register_internal_class(&ce);
 	php_sandbox_ce->create_object = php_sandbox_create;
+	php_sandbox_ce->ce_flags |= ZEND_ACC_FINAL;
 
+	INIT_NS_CLASS_ENTRY(ce, "sandbox", "Exception", NULL);
+
+	php_sandbox_exception_ce = zend_register_internal_class_ex(&ce, zend_ce_error_exception);
+	
 	php_sapi_deactivate_function = sapi_module.deactivate;
 
 	sapi_module.deactivate = NULL;
+
+	php_sandbox_main = zend_string_init(ZEND_STRL("\\sandbox\\Runtime::enter"), 1);
 }
 
 void php_sandbox_shutdown(void) {
 	sapi_module.deactivate = php_sapi_deactivate_function;
+
+	zend_string_release(php_sandbox_main);
 }
 
-static void php_sandbox_execute(zend_function *function, zval *argv, zval *retval) {
+static void php_sandbox_execute(php_sandbox_monitor_t *monitor, zend_function *function, zval *argv, zval *retval) {
 	zval rv;
 	zend_fcall_info fci = empty_fcall_info;
 	zend_fcall_info_cache fcc = empty_fcall_info_cache;
+	int rc = FAILURE;
 
 	fci.size = sizeof(zend_fcall_info);
 	fci.retval = &rv;
@@ -214,30 +258,17 @@ static void php_sandbox_execute(zend_function *function, zval *argv, zval *retva
 	ZVAL_UNDEF(&rv);
 
 	zend_try {
-		zend_call_function(&fci, &fcc);
+		rc = zend_call_function(&fci, &fcc);
+	} zend_catch {
+		php_sandbox_monitor_set(monitor,
+			PHP_SANDBOX_ERROR|PHP_SANDBOX_WAKE);
 	} zend_end_try();
 
-	if (!Z_ISUNDEF(rv)) {
-		switch (Z_TYPE(rv)) {
-			case IS_TRUE:
-			case IS_FALSE:
-			case IS_NULL:
-			case IS_LONG:
-			case IS_DOUBLE:
-				ZVAL_COPY(retval, &rv);
-			break;
+	if (rc == SUCCESS && !Z_ISUNDEF(rv)) {
+		php_sandbox_copy_zval(retval, &rv, 1);
 
-			case IS_STRING: {
-				zend_string *out = zend_string_init(
-						Z_STRVAL(rv), Z_STRLEN(rv), 1);
-				ZVAL_STR(retval, out);
-				zval_ptr_dtor(&rv);
-			} break;
-
-			default:
-				if (Z_REFCOUNTED(rv)) {
-					zval_ptr_dtor(&rv);
-				}
+		if (Z_REFCOUNTED(rv)) {
+			zval_ptr_dtor(&rv);
 		}
 	}
 
@@ -249,6 +280,36 @@ static void php_sandbox_execute(zend_function *function, zval *argv, zval *retva
 	efree(fcc.function_handler);
 }
 
+static zend_always_inline void php_sandbox_configure_callback(int (*zend_callback) (char *, size_t), zval *value) {
+	if (Z_TYPE_P(value) == IS_ARRAY) {
+		zval *val;
+		ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(value), val) {
+			if (Z_TYPE_P(val) == IS_STRING) {
+				zend_callback(Z_STRVAL_P(val), Z_STRLEN_P(val));
+			}
+		} ZEND_HASH_FOREACH_END();
+	} else if (Z_TYPE_P(value) == IS_STRING) {
+		char *start  = Z_STRVAL_P(value),
+		     *end    = Z_STRVAL_P(value) + Z_STRLEN_P(value),
+		     *next   = (char *) php_memnstr(Z_STRVAL_P(value), ZEND_STRL(","), end);
+
+		if (next == NULL) {
+			zend_callback(Z_STRVAL_P(value), Z_STRLEN_P(value));
+			return;
+		}
+
+		do {
+			zend_callback(start, next - start);
+			start = next + 1;
+			next  = (char *) php_memnstr(start, ZEND_STRL(","), end);
+		} while(next);
+
+		if (start <= end) {
+			zend_callback(start, end - start);
+		}
+	}
+}
+
 static zend_always_inline void php_sandbox_configure(zval *configuration) {
 	zend_string *name;
 	zval        *value;
@@ -257,17 +318,31 @@ static zend_always_inline void php_sandbox_configure(zval *configuration) {
 		zend_string *chars;
 		zend_string *local = zend_string_dup(name, 1);
 
-		if (Z_TYPE_P(value) == IS_STRING) {
-			chars = Z_STR_P(value);
+		if (zend_string_equals_literal_ci(local, "disable_functions")) {
+			php_sandbox_configure_callback(zend_disable_function, value);
+		} else if (zend_string_equals_literal_ci(local, "disable_classes")) {
+			php_sandbox_configure_callback(zend_disable_class, value);
+		} else if (zend_string_equals_literal_ci(local, "extension") ||
+			   zend_string_equals_literal_ci(local, "zend_extension")) {
+			/* nothing, use dl for modules and don't load zend_extensions */
 		} else {
-			chars = zval_get_string(value);
-		}
+			switch (Z_TYPE_P(value)) {
+				case IS_STRING:
+				case IS_TRUE:
+				case IS_FALSE:
+				case IS_LONG:
+				case IS_DOUBLE:
+					chars = zval_get_string(value);
+				break;
 
-		zend_alter_ini_entry_chars(local, 
-			ZSTR_VAL(chars), ZSTR_LEN(chars), 
-			ZEND_INI_SYSTEM, ZEND_INI_STAGE_ACTIVATE);
+				default:
+					continue;
+			}
 
-		if (Z_TYPE_P(value) != IS_STRING) {
+			zend_alter_ini_entry_chars(local, 
+				ZSTR_VAL(chars), ZSTR_LEN(chars), 
+				ZEND_INI_SYSTEM, ZEND_INI_STAGE_ACTIVATE);
+
 			zend_string_release(chars);
 		}
 
@@ -289,8 +364,16 @@ void* php_sandbox_routine(void *arg) {
 			TSRM_UNSHUFFLE_RSRC_ID(sapi_globals_id)
 	])->server_context);
 
-	PG(expose_php) = 0;
+	ZG(sandbox)          = 1;
+	PG(expose_php)       = 0;
 	PG(auto_globals_jit) = 0;
+
+	php_request_startup();
+
+	PG(during_request_startup)  = 0;
+	SG(sapi_started)            = 0;
+	SG(headers_sent)            = 1;
+	SG(request_info).no_headers = 1;
 
 	if (!Z_ISUNDEF(sandbox->configuration)) {
 		php_sandbox_configure(&sandbox->configuration);
@@ -298,28 +381,23 @@ void* php_sandbox_routine(void *arg) {
 
 	php_sandbox_monitor_set(sandbox->monitor, PHP_SANDBOX_READY);
 
-	php_request_startup();
-
-	SG(sapi_started)            = 0;
-	SG(headers_sent)            = 1;
-	SG(request_info).no_headers = 1;
-
 	ZVAL_UNDEF(&sandbox->entry.retval);
 
 	while ((state = php_sandbox_monitor_wait(sandbox->monitor, PHP_SANDBOX_EXEC|PHP_SANDBOX_CLOSE))) {
 		if (state & PHP_SANDBOX_CLOSE) {
-			php_sandbox_monitor_set(sandbox->monitor, PHP_SANDBOX_WAIT);
+			php_sandbox_monitor_set(sandbox->monitor, PHP_SANDBOX_WAKE);
 			break;
 		}
 
 		zend_first_try {
 			php_sandbox_execute(
+				sandbox->monitor,
 				sandbox->entry.point, 
 				&sandbox->entry.argv, 
 				&sandbox->entry.retval);
 		} zend_end_try();
 
-		php_sandbox_monitor_set(sandbox->monitor, PHP_SANDBOX_WAIT);
+		php_sandbox_monitor_set(sandbox->monitor, PHP_SANDBOX_WAKE);
 	}
 
 	php_sandbox_monitor_set(sandbox->monitor, PHP_SANDBOX_DONE);
@@ -329,5 +407,7 @@ void* php_sandbox_routine(void *arg) {
 	ts_free_thread();
 
 	pthread_exit(NULL);
+
+	return NULL;
 }
 #endif
