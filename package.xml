@@ -1,20 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<package
-  packagerversion="1.10"
-  version="2.0"
-  xmlns="http://pear.php.net/dtd/package-2.0"
-  xmlns:tasks="http://pear.php.net/dtd/tasks-1.0"
-  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xsi:schemaLocation="http://pear.php.net/dtd/tasks-1.0 http://pear.php.net/dtd/tasks-1.0.xsd http://pear.php.net/dtd/package-2.0 http://pear.php.net/dtd/package-2.0.xsd"
- >
+<package xmlns="http://pear.php.net/dtd/package-2.0" xmlns:tasks="http://pear.php.net/dtd/tasks-1.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" packagerversion="1.10" version="2.0" xsi:schemaLocation="http://pear.php.net/dtd/tasks-1.0 http://pear.php.net/dtd/tasks-1.0.xsd http://pear.php.net/dtd/package-2.0 http://pear.php.net/dtd/package-2.0.xsd">
  <name>sandbox</name>
  <channel>pecl.php.net</channel>
  <summary>Isolated environment</summary>
- <description>A sandbox is an isolated environment (a thread in our case); Things may go very
-badly wrong in the sandbox environment and not effect the environment that
-created it. This means that we must try very hard to limit the influence each
-environment has on the other. So the prototype and instructions of entry point
-"Closures" are verified to ensure they will not reduce or break isolation.
+ <description>A sandbox is an isolated environment (a thread in our case); Things may go
+very badly wrong in the sandbox environment and not effect the environment
+that created it. This means that we must try very hard to limit the
+influence each environment has on the other. So the prototype and
+instructions of entry point "Closures" are verified to ensure they will not
+reduce or break isolation.
 
 In practice this means entry point closures must not:
 
@@ -34,9 +28,9 @@ but allowing these instructions directly in the code which the sandbox
 executes at entry would break the isolation of the sandbox such that we
 couldn't be sure the system would remain stable.
 
-With these restrictions in place, we can be sure that a sandbox may do anything
-up to but excluding making PHP segfault, and not effect the environment that
-created it.</description>
+With these restrictions in place, we can be sure that a sandbox may do
+anything up to but excluding making PHP segfault, and not effect the
+environment that created it.</description>
  <lead>
   <name>Joe Watkins</name>
   <user>krakjoe</user>
@@ -64,49 +58,49 @@ created it.</description>
  </notes>
  <contents>
   <dir name="/">
-   <file name="LICENSE" role="doc" />
-   <file name="README.md" role="doc" />
-   <file name="config.m4" role="src" />
-   <file name="config.w32" role="src" />
-   <file name="php_sandbox.h" role="src" />
-   <file name="Makefile.frag" role="src" />
-   <file name="sandbox.c" role="src" />
+   <file name="LICENSE" role="doc"/>
+   <file name="README.md" role="doc"/>
+   <file name="config.m4" role="src"/>
+   <file name="config.w32" role="src"/>
+   <file name="php_sandbox.h" role="src"/>
+   <file name="Makefile.frag" role="src"/>
+   <file name="sandbox.c" role="src"/>
    <dir name="src">
-    <file name="copy.c" role="src" />
-    <file name="copy.h" role="src" />
-    <file name="monitor.c" role="src" />
-    <file name="monitor.h" role="src" />
-    <file name="sandbox.c" role="src" />
-    <file name="sandbox.h" role="src" />
+    <file name="copy.c" role="src"/>
+    <file name="copy.h" role="src"/>
+    <file name="monitor.c" role="src"/>
+    <file name="monitor.h" role="src"/>
+    <file name="sandbox.c" role="src"/>
+    <file name="sandbox.h" role="src"/>
    </dir> <!-- src -->
    <dir name="tests">
-    <file name="001.phpt" role="test" />
-    <file name="002.phpt" role="test" />
-    <file name="003.phpt" role="test" />
-    <file name="004.phpt" role="test" />
-    <file name="005.phpt" role="test" />
-    <file name="006.phpt" role="test" />
-    <file name="007.phpt" role="test" />
-    <file name="008.phpt" role="test" />
-    <file name="009.phpt" role="test" />
-    <file name="010.phpt" role="test" />
-    <file name="011.phpt" role="test" />
-    <file name="012.phpt" role="test" />
-    <file name="013.phpt" role="test" />
-    <file name="014.phpt" role="test" />
-    <file name="015.phpt" role="test" />
-    <file name="016.phpt" role="test" />
-    <file name="017.phpt" role="test" />
-    <file name="018.phpt" role="test" />
-    <file name="019.phpt" role="test" />
-    <file name="020.phpt" role="test" />
-    <file name="021.phpt" role="test" />
-    <file name="022.phpt" role="test" />
-    <file name="023.phpt" role="test" />
-    <file name="024.phpt" role="test" />
-    <file name="025.phpt" role="test" />
-    <file name="026.phpt" role="test" />
-    <file name="027.phpt" role="test" />
+    <file name="001.phpt" role="test"/>
+    <file name="002.phpt" role="test"/>
+    <file name="003.phpt" role="test"/>
+    <file name="004.phpt" role="test"/>
+    <file name="005.phpt" role="test"/>
+    <file name="006.phpt" role="test"/>
+    <file name="007.phpt" role="test"/>
+    <file name="008.phpt" role="test"/>
+    <file name="009.phpt" role="test"/>
+    <file name="010.phpt" role="test"/>
+    <file name="011.phpt" role="test"/>
+    <file name="012.phpt" role="test"/>
+    <file name="013.phpt" role="test"/>
+    <file name="014.phpt" role="test"/>
+    <file name="015.phpt" role="test"/>
+    <file name="016.phpt" role="test"/>
+    <file name="017.phpt" role="test"/>
+    <file name="018.phpt" role="test"/>
+    <file name="019.phpt" role="test"/>
+    <file name="020.phpt" role="test"/>
+    <file name="021.phpt" role="test"/>
+    <file name="022.phpt" role="test"/>
+    <file name="023.phpt" role="test"/>
+    <file name="024.phpt" role="test"/>
+    <file name="025.phpt" role="test"/>
+    <file name="026.phpt" role="test"/>
+    <file name="027.phpt" role="test"/>
    </dir> <!-- tests -->
   </dir>
  </contents>
@@ -121,5 +115,5 @@ created it.</description>
   </required>
  </dependencies>
  <providesextension>sandbox</providesextension>
- <extsrcrelease />
+ <extsrcrelease/>
 </package>

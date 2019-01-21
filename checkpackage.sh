@@ -6,3 +6,5 @@ do
   grep -q $k package.xml || echo missing $k
 done
 
+./syncdescription.php
+
