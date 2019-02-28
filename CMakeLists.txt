@@ -6,6 +6,13 @@ FIND_PROGRAM(PHP_CONFIG NAMES php-config DOC "path to php-config")
 
 if (!PHP_CONFIG)
     MESSAGE (FATAL_ERROR "php-config cannot be found") 
+else()
+    EXECUTE_PROCESS (COMMAND ${PHP_CONFIG} --version   OUTPUT_VARIABLE PHP_VERSION_STRING     OUTPUT_STRIP_TRAILING_WHITESPACE)
+    if (PHP_VERSION_STRING STREQUAL "")
+        MESSAGE (FATAL_ERROR "${PHP_CONFIG} could not be executed")
+    else()
+        MESSAGE (STATUS "Configuring for ${PHP_VERSION_STRING} with ${PHP_CONFIG}")
+    endif()
 endif()
 
 EXECUTE_PROCESS (COMMAND ${PHP_CONFIG} --configure-options   OUTPUT_VARIABLE PHP_CONFIGURE     OUTPUT_STRIP_TRAILING_WHITESPACE)
@@ -22,7 +29,7 @@ INCLUDE_DIRECTORIES(${PHP_INCLUDE_DIR}
                     ${PHP_INCLUDE_DIR}/main
                     ${PHP_INCLUDE_DIR}/ext
                     ${PHP_INCLUDE_DIR}/ext/standard)
-                    
+
 if (${PHP_CONFIGURE} MATCHES "enable-debug")
     SET(CMAKE_BUILD_TYPE Debug CACHE STRING "PHP Build Type")
 else()
