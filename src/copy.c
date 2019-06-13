@@ -86,7 +86,12 @@ HashTable *php_sandbox_copy_hash(HashTable *source, zend_bool persistent) {
 
 	ht->u.flags |= HASH_FLAG_STATIC_KEYS;
 	if (ht->nNumUsed == 0) {
+#if PHP_VERSION_ID < 70400
 		ht->u.flags &= ~(HASH_FLAG_INITIALIZED|HASH_FLAG_PACKED);
+#else
+		ht->u.flags &= ~(HASH_FLAG_PACKED);
+		HT_INVALIDATE(ht);
+#endif
 		ht->nNextFreeElement = 0;
 		ht->nTableMask = HT_MIN_MASK;
 		HT_SET_DATA_ADDR(ht, &uninitialized_bucket);
@@ -432,8 +437,12 @@ zend_bool php_sandbox_copy_check(php_sandbox_t *sandbox, zend_execute_data *exec
 				return 0;
 
 			case ZEND_DECLARE_CLASS:
+#ifdef ZEND_DECLARE_INHERITED_CLASS
 			case ZEND_DECLARE_INHERITED_CLASS:
 			case ZEND_DECLARE_INHERITED_CLASS_DELAYED:
+#else
+			case ZEND_DECLARE_CLASS_DELAYED:
+#endif
 				zend_throw_error(NULL,
 					"illegal instruction (class) on line %d of entry point", 
 					it->lineno - function->op_array.line_start);
