@@ -22,7 +22,7 @@
 extern zend_module_entry sandbox_module_entry;
 # define phpext_sandbox_ptr &sandbox_module_entry
 
-# define PHP_SANDBOX_VERSION "0.1.1"
+# define PHP_SANDBOX_VERSION "0.1.2"
 
 # if defined(ZTS) && defined(COMPILE_DL_SANDBOX)
 ZEND_TSRMLS_CACHE_EXTERN()
