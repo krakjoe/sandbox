@@ -43,9 +43,9 @@ environment that created it.</description>
   <email>remi@php.net</email>
   <active>yes</active>
  </lead>
- <date>2019-01-16</date>
+ <date>2019-06-14</date>
  <version>
-  <release>0.1.1</release>
+  <release>0.1.2</release>
   <api>0.1.1</api>
  </version>
  <stability>
@@ -54,7 +54,8 @@ environment that created it.</description>
  </stability>
  <license uri="http://www.php.net/license">PHP License</license>
  <notes>
-- initial pecl release
+- Fix compatibility with 7.4.0alpha1
+- Display extension version in phpinfo
  </notes>
  <contents>
   <dir name="/">
@@ -116,4 +117,21 @@ environment that created it.</description>
  </dependencies>
  <providesextension>sandbox</providesextension>
  <extsrcrelease/>
+  <changelog>
+   <release>
+    <date>2019-01-16</date>
+    <version>
+     <release>0.1.1</release>
+     <api>0.1.1</api>
+    </version>
+    <stability>
+     <release>beta</release>
+     <api>beta</api>
+    </stability>
+    <license uri="http://www.php.net/license">PHP License</license>
+    <notes>
+- initial pecl release
+    </notes>
+   </release>
+  </changelog>
 </package>
