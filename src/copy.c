@@ -223,7 +223,9 @@ static inline zend_op* php_sandbox_copy_opcodes(zend_op_array *op_array, zval *l
 					case ZEND_JMP:
 					case ZEND_FAST_CALL:
 					case ZEND_DECLARE_ANON_CLASS:
+#if PHP_VERSION_ID < 70400
 					case ZEND_DECLARE_ANON_INHERITED_CLASS:
+#endif
 						 opline->op1.jmp_addr = &copy[opline->op1.jmp_addr - op_array->opcodes];
 					break;
 
